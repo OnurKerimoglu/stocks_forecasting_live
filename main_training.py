@@ -14,24 +14,43 @@ from data import (
 )
 from models import create_fit_xgbregressor_chain, evaluate_all
 
-# Configuration parameters
-test_mode = True
-use_sample_tickers_for_training = True
-sample_tickers = ["AAPL", "AMZN"]
-target = "returns"
-forecast_steps = 5
-
-rootpath = os.path.dirname(__file__)
-datapath = os.path.join(rootpath, "data")
-datasetname = "world-stock-prices-daily-updating"
-
 
 @Flow
-def stocks_forecasting_training_pipeline() -> None:
+def stocks_forecasting_training_pipeline(
+    test_mode: bool = True,
+    use_sample_tickers_for_training: bool = True
+    ) -> None:
+    """
+    The main training pipeline for the stocks forecasting project.
+
+    This pipeline is orchestrated by prefect and performs the following steps:
+    1. Get the raw data
+    2. Clean the raw data (e.g. winsorize returns)
+    3. Sample tickers and dates
+    4. Split train and test
+    5. Training: prepare train data
+    6. Start training the model asynchronously
+    7. Prepare test data while the model is training
+    8. Once the estimator and data are ready, evaluate the model
+    9. Cleanup (remove raw data if not in test mode)
+
+    Args:
+    test_mode: bool
+        whether to run the pipeline in test mode or not
+    use_sample_tickers_for_training: bool
+        whether to use a sample of tickers for training
+    """
     logger = get_run_logger()
+    # Configuration parameters
+    target = "returns"
+    sample_tickers = ["AAPL", "AMZN"]
+    forecast_steps = 5
+    rootpath = os.path.dirname(__file__)
+    datapath = os.path.join(rootpath, "data")
+
     # get the raw data
     df_raw = load_raw_data(
-        datapath=datapath, user="nelgiriyewithana", datasetname=datasetname
+        datapath=datapath, user="nelgiriyewithana", datasetname="world-stock-prices-daily-updating"
     )
     # clean the raw data (e.g. winsorize returns)
     df_clean = clean_raw_data(df_raw)
@@ -76,7 +95,10 @@ def stocks_forecasting_training_pipeline() -> None:
 
 
 if __name__ == "__main__":
-    stocks_forecasting_training_pipeline()
+    stocks_forecasting_training_pipeline(
+        test_mode=True,
+        use_sample_tickers_for_training=True
+    )
     # stocks_forecasting_training_pipeline.deploy(
     #     name="stocks_forecasting_train",
     #     work_pool_name="stocks_forecasting_live_local",
