@@ -1,0 +1,14 @@
+[project]
+name = "stocks-forecasting-live"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "mlflow>=3.1.1",
+    "pandas>=2.3.1",
+    "prefect>=3.4.9",
+    "ruff>=0.12.4",
+    "scikit-learn>=1.7.1",
+    "xgboost>=3.0.2",
+]
