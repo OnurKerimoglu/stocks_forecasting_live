@@ -16,14 +16,14 @@ from models import create_fit_xgbregressor_chain, evaluate_all
 
 
 @Flow
-def stocks_forecasting_training_pipeline(
+def stocks_forecasting_training_flow(
     test_mode: bool = True,
     use_sample_tickers_for_training: bool = True
     ) -> None:
     """
-    The main training pipeline for the stocks forecasting project.
+    The main training workflow for the stocks forecasting project.
 
-    This pipeline is orchestrated by prefect and performs the following steps:
+    This workflow is orchestrated by prefect and performs the following steps:
     1. Get the raw data
     2. Clean the raw data (e.g. winsorize returns)
     3. Sample tickers and dates
@@ -95,14 +95,7 @@ def stocks_forecasting_training_pipeline(
 
 
 if __name__ == "__main__":
-    stocks_forecasting_training_pipeline(
+    stocks_forecasting_training_flow(
         test_mode=True,
         use_sample_tickers_for_training=True
     )
-    # stocks_forecasting_training_pipeline.deploy(
-    #     name="stocks_forecasting_train",
-    #     work_pool_name="stocks_forecasting_live_local",
-    #     image="my-image",
-    #     push=False,
-    #     # cron="* * * * *",
-    # )
