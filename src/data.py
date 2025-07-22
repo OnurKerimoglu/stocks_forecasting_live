@@ -1,14 +1,17 @@
 import os
+from datetime import datetime
+from typing import List, Tuple
 
 import kaggle
 import pandas as pd
-from statsmodels.tsa.deterministic import DeterministicProcess, CalendarFourier
+from statsmodels.tsa.deterministic import CalendarFourier, DeterministicProcess
+
 
 def load_raw_data(datapath: str, user: str, datasetname: str) -> pd.DataFrame:
     """
     Loads raw data from a specified dataset using the Kaggle API.
 
-    For the Kaggle API to work, you need to have a Kaggle account and 
+    For the Kaggle API to work, you need to have a Kaggle account and
     a Kaggle API token (see: https://www.kaggle.com/docs/api).
     If the dataset file does not exist in the specified path, it downloads
     and unzips the dataset from Kaggle. Otherwise, it reads the existing
@@ -27,25 +30,25 @@ def load_raw_data(datapath: str, user: str, datasetname: str) -> pd.DataFrame:
         A DataFrame containing the raw data from the dataset.
     """
 
-    print(f'rootpath: {datapath}')
+    print(f"rootpath: {datapath}")
 
     os.makedirs(datapath, exist_ok=True)
-    if not os.path.exists(os.path.join(datapath, 'World-Stock-Prices-Dataset.csv')):
+    if not os.path.exists(os.path.join(datapath, "World-Stock-Prices-Dataset.csv")):
         kaggle.api.dataset_download_files(
-            dataset=f'{user}/{datasetname}',
-            path=datapath,
-            unzip=True)
+            dataset=f"{user}/{datasetname}", path=datapath, unzip=True
+        )
     else:
-        print('Raw data already found in location {}'.format(datapath))
+        print("Raw data already found in location {}".format(datapath))
 
     raw_fpath = os.listdir(datapath)[0]
     raw_fpath_full = os.path.join(datapath, raw_fpath)
 
-    print(f'reading raw data from: {raw_fpath_full}')
+    print(f"reading raw data from: {raw_fpath_full}")
     df_raw = pd.read_csv(raw_fpath_full)
     return df_raw
 
-def clean_raw_data(df_raw):
+
+def clean_raw_data(df_raw: pd.DataFrame) -> pd.DataFrame:
     """
     Cleans and processes raw stock price data.
 
@@ -65,20 +68,28 @@ def clean_raw_data(df_raw):
     """
 
     df_clean = df_raw.copy()
-    df_clean['Date'] = pd.to_datetime(df_clean['Date'], utc=True).dt.tz_convert(None)
-    df_clean.drop_duplicates(subset=['Date', 'Ticker'], keep='first', inplace=True)
-    df_clean = df_clean[['Date', 'Close', 'Ticker']]
-    df_clean['returns'] = (df_clean.groupby('Ticker')['Close'].pct_change())
+    df_clean["Date"] = pd.to_datetime(df_clean["Date"], utc=True).dt.tz_convert(None)
+    df_clean.drop_duplicates(subset=["Date", "Ticker"], keep="first", inplace=True)
+    df_clean = df_clean[["Date", "Close", "Ticker"]]
+    df_clean["returns"] = df_clean.groupby("Ticker")["Close"].pct_change()
     lower, upper = (
-        df_clean['returns'].quantile(0.01),
-        df_clean['returns'].quantile(0.99),
+        df_clean["returns"].quantile(0.01),
+        df_clean["returns"].quantile(0.99),
     )
-    print(f'The returns are winsorized with upper and lower caps of respectively {upper} and {lower}')
-    df_clean['returns'] = df_clean['returns'].clip(lower, upper)
+    print(
+        f"The returns are winsorized with upper and lower caps of respectively {upper} and {lower}"
+    )
+    df_clean["returns"] = df_clean["returns"].clip(lower, upper)
     df_clean.dropna(inplace=True)
     return df_clean
 
-def sample_tickers_dates(df_clean, tickers=None, startdate=None, clean_sample_fpath_full=None):
+
+def sample_tickers_dates(
+    df_clean: pd.DataFrame,
+    tickers: list = None,
+    startdate: datetime = None,
+    clean_sample_fpath_full: str = None,
+) -> pd.DataFrame:
     """
     Samples a subset of tickers and/or dates from a cleaned DataFrame.
 
@@ -106,29 +117,27 @@ def sample_tickers_dates(df_clean, tickers=None, startdate=None, clean_sample_fp
     if tickers is None:
         df_clean_sample = df_clean.copy()
     else:
-        print(f'Sampling tickers: {tickers}')
-        df_clean_sample = df_clean[
-            (df_clean['Ticker'].isin(tickers))
-        ].copy()
+        print(f"Sampling tickers: {tickers}")
+        df_clean_sample = df_clean[(df_clean["Ticker"].isin(tickers))].copy()
     if startdate is not None:
-        print(f'Sampling from start date: {startdate}')
-        df_clean_sample = df_clean_sample[df_clean_sample['Date'] >= startdate].copy()
+        print(f"Sampling from start date: {startdate}")
+        df_clean_sample = df_clean_sample[df_clean_sample["Date"] >= startdate].copy()
     # df_clean_sample.Date = pd.to_datetime(df_clean_sample['Date'])
     # print(f'sample shape: {df_clean_sample.shape}')
     # df_clean_sample.sort_values('Date', ascending=True).head()
     if clean_sample_fpath_full is not None:
         df_clean_sample.to_csv(clean_sample_fpath_full, index=False)
-        print(f'Wrote clean sample to: {clean_sample_fpath_full}')
-    df_clean_sample.sort_values(['Ticker', 'Date'], inplace=True)
+        print(f"Wrote clean sample to: {clean_sample_fpath_full}")
+    df_clean_sample.sort_values(["Ticker", "Date"], inplace=True)
     return df_clean_sample
 
-def split_train_test_panel(df: pd.DataFrame,
-                           train_ratio: float,
-                           date_col: str = 'Date'
-                          ):
+
+def split_train_test_panel(
+    df: pd.DataFrame, train_ratio: float, date_col: str = "Date"
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Splits a panel DataFrame into train/test by date, preserving all tickers
-    and *not* shuffling. 
+    and *not* shuffling.
 
     Args:
     df : pd.DataFrame
@@ -157,11 +166,14 @@ def split_train_test_panel(df: pd.DataFrame,
     # Boolean mask and split
     mask = dates <= split_date
     df_train = df.loc[mask]
-    df_test  = df.loc[~mask]
+    df_test = df.loc[~mask]
 
     return df_train, df_test
 
-def build_features(df_in, lags=3):
+
+def build_features(
+    df_in: pd.DataFrame, lags: int = 3
+) -> Tuple[pd.DataFrame, List[str]]:
     """
     Builds features for a given panel dataframe.
 
@@ -182,101 +194,113 @@ def build_features(df_in, lags=3):
         List of feature names that should be scaled (e.g. by StandardScaler), depending on the model.
     """
     feats = []
-    for ticker, grp in df_in.groupby('Ticker'):
-        df = grp.sort_values('Date').copy()
+    for ticker, grp in df_in.groupby("Ticker"):
+        df = grp.sort_values("Date").copy()
 
         features_to_scale = []
         # AR features
         lag_feat_names = []
         for lag in range(1, lags + 1):
-            feat_name = f'returns_lag{lag}'
-            df[feat_name] = df['returns'].shift(lag)
+            feat_name = f"returns_lag{lag}"
+            df[feat_name] = df["returns"].shift(lag)
             lag_feat_names.append(feat_name)
             features_to_scale.append(feat_name)
 
         # Moving Averages (SMA & EMA)
         ma_feat_names = []
         for w in [10, 50]:
-            feat_name = f'SMA_{w}'
-            df[feat_name] = df['Close'].rolling(window=w).mean()
-            ma_feat_names.append(f'SMA_{w}')
+            feat_name = f"SMA_{w}"
+            df[feat_name] = df["Close"].rolling(window=w).mean()
+            ma_feat_names.append(f"SMA_{w}")
             features_to_scale.append(feat_name)
         for w in [12, 26]:
-            feat_name = f'EMA_{w}'
-            df[feat_name] = df['Close'].ewm(span=w, adjust=False).mean()
+            feat_name = f"EMA_{w}"
+            df[feat_name] = df["Close"].ewm(span=w, adjust=False).mean()
             ma_feat_names.append(feat_name)
             features_to_scale.append(feat_name)
-        
+
         # Indices
         index_feat_names = []
         # MACD, Signal & Histogram
-        df['MACD']        = df['EMA_12'] - df['EMA_26']
-        df['MACD_Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
-        df['MACD_Hist']   = df['MACD'] - df['MACD_Signal']
-        index_feat_names += ['MACD', 'MACD_Signal', 'MACD_Hist']
-        features_to_scale += ['MACD', 'MACD_Signal', 'MACD_Hist']
+        df["MACD"] = df["EMA_12"] - df["EMA_26"]
+        df["MACD_Signal"] = df["MACD"].ewm(span=9, adjust=False).mean()
+        df["MACD_Hist"] = df["MACD"] - df["MACD_Signal"]
+        index_feat_names += ["MACD", "MACD_Signal", "MACD_Hist"]
+        features_to_scale += ["MACD", "MACD_Signal", "MACD_Hist"]
 
         # Bollinger Bands & Width
-        df['BB_Middle'] = df['Close'].rolling(window=20).mean()
-        df['BB_STD']    = df['Close'].rolling(window=20).std()
-        df['BB_Upper']  = df['BB_Middle'] + 2 * df['BB_STD']
-        df['BB_Lower']  = df['BB_Middle'] - 2 * df['BB_STD']
-        df['BB_Width']  = (df['BB_Upper'] - df['BB_Lower']) / df['BB_Middle']
-        index_feat_names += ['BB_Middle', 'BB_STD', 'BB_Upper', 'BB_Lower', 'BB_Width']
-        features_to_scale += ['BB_Middle', 'BB_Upper', 'BB_Lower'] # no need to scale BB_STD and BB_Width
+        df["BB_Middle"] = df["Close"].rolling(window=20).mean()
+        df["BB_STD"] = df["Close"].rolling(window=20).std()
+        df["BB_Upper"] = df["BB_Middle"] + 2 * df["BB_STD"]
+        df["BB_Lower"] = df["BB_Middle"] - 2 * df["BB_STD"]
+        df["BB_Width"] = (df["BB_Upper"] - df["BB_Lower"]) / df["BB_Middle"]
+        index_feat_names += ["BB_Middle", "BB_STD", "BB_Upper", "BB_Lower", "BB_Width"]
+        features_to_scale += [
+            "BB_Middle",
+            "BB_Upper",
+            "BB_Lower",
+        ]  # no need to scale BB_STD and BB_Width
 
         # RSI (14)
-        delta     = df['Close'].diff()
-        up        = delta.clip(lower=0)
-        down      = -delta.clip(upper=0)
-        avg_gain  = up.rolling(window=14).mean()
-        avg_loss  = down.rolling(window=14).mean()
-        rs        = avg_gain / avg_loss
-        df['RSI_14'] = 100 - (100 / (1 + rs))
-        index_feat_names += ['RSI_14']
+        delta = df["Close"].diff()
+        up = delta.clip(lower=0)
+        down = -delta.clip(upper=0)
+        avg_gain = up.rolling(window=14).mean()
+        avg_loss = down.rolling(window=14).mean()
+        rs = avg_gain / avg_loss
+        df["RSI_14"] = 100 - (100 / (1 + rs))
+        index_feat_names += ["RSI_14"]
         # no need to scale this feature
 
         # Rate of Change (10)
-        df['ROC_10'] = df['Close'].pct_change(periods=10)
-        index_feat_names += ['ROC_10']
-        features_to_scale += ['ROC_10']
+        df["ROC_10"] = df["Close"].pct_change(periods=10)
+        index_feat_names += ["ROC_10"]
+        features_to_scale += ["ROC_10"]
 
         # Trend + seasonality
-        df['Period'] = df['Date'].dt.to_period('D')
-        df = df.set_index('Period')
+        df["Period"] = df["Date"].dt.to_period("D")
+        df = df.set_index("Period")
         dp = DeterministicProcess(
             index=df.index,
-            constant=False, 
-            order=0,  # no trend 
+            constant=False,
+            order=0,  # no trend
             seasonal=False,  # no additional seasonality terms
             additional_terms=[
                 # CalendarFourier(freq='YE', order=1),
                 # CalendarFourier(freq='QE', order=1),
-                CalendarFourier(freq='ME', order=1),
-                CalendarFourier(freq='W',  order=1)
-            ]
+                CalendarFourier(freq="ME", order=1),
+                CalendarFourier(freq="W", order=1),
+            ],
         )
         tf = dp.in_sample()
-        
+
         # Select features
-        feature_cols = ['Ticker', 'Date', 'returns'] + lag_feat_names + ma_feat_names + index_feat_names
+        feature_cols = (
+            ["Ticker", "Date", "returns"]
+            + lag_feat_names
+            + ma_feat_names
+            + index_feat_names
+        )
         df_feat = df[feature_cols]
 
         # Merge and reset index
-        df_feat = df_feat.reset_index().drop(columns=['Period'])
-        merged = pd.concat([df_feat.reset_index(drop=True), tf.reset_index(drop=True)], axis=1)
+        df_feat = df_feat.reset_index().drop(columns=["Period"])
+        merged = pd.concat(
+            [df_feat.reset_index(drop=True), tf.reset_index(drop=True)], axis=1
+        )
 
         # Drop rows with any NaNs
         merged = merged.dropna().reset_index(drop=True)
 
         feats.append(merged)
-        
+
     # Concatenate all ticker dataframes
     df_out = pd.concat(feats, ignore_index=True)
-    
+
     return df_out, features_to_scale
 
-def make_multistep_target(y, steps):
+
+def make_multistep_target(y: pd.Series, steps: int) -> pd.DataFrame:
     """
     Generates a multi-step target DataFrame from a single-step target series.
 
@@ -292,15 +316,14 @@ def make_multistep_target(y, steps):
         A DataFrame with each column corresponding to a future step's target
         values. Rows with NaN values are dropped to ensure data integrity.
     """
-    y_multi = pd.concat(
-        {f'y_step_{i + 1}': y.shift(-i)
-         for i in range(steps)},
-        axis=1
-        )
+    y_multi = pd.concat({f"y_step_{i + 1}": y.shift(-i) for i in range(steps)}, axis=1)
     y_multi.dropna(inplace=True)
     return y_multi
 
-def create_X_y_multistep(df_all, steps=5, target='returns', verbose=False):
+
+def create_X_y_multistep(
+    df_all: pd.DataFrame, steps: int = 5, target: str = "returns", verbose: bool = False
+) -> Tuple[pd.DataFrame, pd.DataFrame]:
     """
     Creates featuress and multi-step targets.
 
@@ -333,17 +356,17 @@ def create_X_y_multistep(df_all, steps=5, target='returns', verbose=False):
     y_list = []
     X_list = []
     # loop over tickers to create multistep targets
-    for ticker, grp in df_all.groupby('Ticker'):
-        df = grp.sort_values('Date').copy()
+    for ticker, grp in df_all.groupby("Ticker"):
+        df = grp.sort_values("Date").copy()
         y = df[target]
         y_multi = make_multistep_target(y, steps=steps).dropna()
         X = df.drop(columns=[target])
         # Shifting has created indexes that don't match. Only keep times for
         # which we have both targets and features.
-        y_multi, X = y_multi.align(X, join='inner', axis=0)
+        y_multi, X = y_multi.align(X, join="inner", axis=0)
         # Add Ticker and Date, which will be used as indices later
-        y_multi['Ticker'] = ticker
-        y_multi['Date'] = X['Date']
+        y_multi["Ticker"] = ticker
+        y_multi["Date"] = X["Date"]
         # check whether anything left from X and y_multi after droppping Nas
         if y_multi.shape[0] == 0 or X.shape[0] == 0:
             print(f"For ticker: {ticker}, no data left after dropping NaNs.")
@@ -351,12 +374,14 @@ def create_X_y_multistep(df_all, steps=5, target='returns', verbose=False):
             y_list.append(y_multi)
             X_list.append(X)
     if len(y_list) == 0 or len(X_list) == 0:
-        raise ValueError("No data left after processing. Check your input data and parameters.")
+        raise ValueError(
+            "No data left after processing. Check your input data and parameters."
+        )
     else:
         y_multi_all = pd.concat(y_list)
         X_all = pd.concat(X_list)
         if verbose:
-            print(f'X shape: {X_all.shape}, y_multi shape: {y_multi_all.shape}')
-        X_all.set_index(['Ticker', 'Date'], inplace=True)
-        y_multi_all.set_index(['Ticker', 'Date'], inplace=True)
+            print(f"X shape: {X_all.shape}, y_multi shape: {y_multi_all.shape}")
+        X_all.set_index(["Ticker", "Date"], inplace=True)
+        y_multi_all.set_index(["Ticker", "Date"], inplace=True)
         return X_all, y_multi_all
