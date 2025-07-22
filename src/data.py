@@ -1,6 +1,5 @@
 import os
 from datetime import datetime
-from typing import List, Tuple
 
 import kaggle
 import pandas as pd
@@ -38,7 +37,7 @@ def load_raw_data(datapath: str, user: str, datasetname: str) -> pd.DataFrame:
             dataset=f"{user}/{datasetname}", path=datapath, unzip=True
         )
     else:
-        print("Raw data already found in location {}".format(datapath))
+        print(f"Raw data already found in location {datapath}")
 
     raw_fpath = os.listdir(datapath)[0]
     raw_fpath_full = os.path.join(datapath, raw_fpath)
@@ -86,9 +85,9 @@ def clean_raw_data(df_raw: pd.DataFrame) -> pd.DataFrame:
 
 def sample_tickers_dates(
     df_clean: pd.DataFrame,
-    tickers: list = None,
-    startdate: datetime = None,
-    clean_sample_fpath_full: str = None,
+    tickers: list | None = None,
+    startdate: datetime | None = None,
+    clean_sample_fpath_full: str | None = None,
 ) -> pd.DataFrame:
     """
     Samples a subset of tickers and/or dates from a cleaned DataFrame.
@@ -134,7 +133,7 @@ def sample_tickers_dates(
 
 def split_train_test_panel(
     df: pd.DataFrame, train_ratio: float, date_col: str = "Date"
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Splits a panel DataFrame into train/test by date, preserving all tickers
     and *not* shuffling.
@@ -173,7 +172,7 @@ def split_train_test_panel(
 
 def build_features(
     df_in: pd.DataFrame, lags: int = 3
-) -> Tuple[pd.DataFrame, List[str]]:
+) -> tuple[pd.DataFrame, list[str]]:
     """
     Builds features for a given panel dataframe.
 
@@ -194,7 +193,7 @@ def build_features(
         List of feature names that should be scaled (e.g. by StandardScaler), depending on the model.
     """
     feats = []
-    for ticker, grp in df_in.groupby("Ticker"):
+    for _ticker, grp in df_in.groupby("Ticker"):
         df = grp.sort_values("Date").copy()
 
         features_to_scale = []
@@ -275,12 +274,7 @@ def build_features(
         tf = dp.in_sample()
 
         # Select features
-        feature_cols = (
-            ["Ticker", "Date", "returns"]
-            + lag_feat_names
-            + ma_feat_names
-            + index_feat_names
-        )
+        feature_cols = [*["Ticker", "Date", "returns"], *lag_feat_names, *ma_feat_names, *index_feat_names]
         df_feat = df[feature_cols]
 
         # Merge and reset index
@@ -296,6 +290,7 @@ def build_features(
 
     # Concatenate all ticker dataframes
     df_out = pd.concat(feats, ignore_index=True)
+    # print(f'Built features: {df_out.columns}')
 
     return df_out, features_to_scale
 
@@ -323,7 +318,7 @@ def make_multistep_target(y: pd.Series, steps: int) -> pd.DataFrame:
 
 def create_X_y_multistep(
     df_all: pd.DataFrame, steps: int = 5, target: str = "returns", verbose: bool = False
-) -> Tuple[pd.DataFrame, pd.DataFrame]:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Creates featuress and multi-step targets.
 

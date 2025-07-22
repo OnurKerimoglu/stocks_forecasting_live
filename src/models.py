@@ -1,4 +1,3 @@
-from typing import Union
 
 import pandas as pd
 from sklearn.metrics import root_mean_squared_error
@@ -43,14 +42,14 @@ def create_fit_xgbregressor_chain(
 
 
 def evaluate_all(
-    estimator: Union[RegressorChain],
+    estimator: RegressorChain,  # add other estimators as needed
     X_train: pd.DataFrame,
     y_train: pd.DataFrame,
     X_test: pd.DataFrame,
     y_test: pd.DataFrame,
     df: pd.DataFrame,
     tickers: list,
-):
+) -> dict:
     """
     Loops through the data to perform evalation of the model on the entire datast and on individual tickers.
 
@@ -59,10 +58,14 @@ def evaluate_all(
     Args:
     estimator : RegressorChain
         The model to be evaluated
-    X_train, y_train : pd.DataFrame
-        Feature and target data for the training data
-    X_test, y_test : pd.DataFrame
-        Feature and target data for the test data
+    X_train: pd.DataFrame
+        Feature data for training
+    y_train: pd.DataFrame
+        Target data for training
+    X_test: pd.DataFrame
+        Feature data for testing
+    y_train: pd.DataFrame
+        Target data for testing
     df : pd.DataFrame
         The original data frame, required for visualization
     tickers : list
