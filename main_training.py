@@ -1,7 +1,7 @@
 import datetime
 import os
 
-from prefect import Flow
+from prefect import Flow, get_run_logger
 
 from data import (
     build_features,
@@ -26,10 +26,14 @@ datasetname = "world-stock-prices-daily-updating"
 
 @Flow
 def stocks_forecasting_training_pipeline() -> None:
+    logger = get_run_logger()
+    # get the raw data
     df_raw = load_raw_data(
         datapath=datapath, user="nelgiriyewithana", datasetname=datasetname
     )
+    # clean the raw data (e.g. winsorize returns)
     df_clean = clean_raw_data(df_raw)
+    # sample tickers and dates
     df = sample_tickers_dates(
         df_clean,
         tickers=sample_tickers if use_sample_tickers_for_training else None,
@@ -37,6 +41,7 @@ def stocks_forecasting_training_pipeline() -> None:
         clean_sample_fpath_full=None,
         # clean_sample_fpath_full=os.path.join(datapath, f'{datasetname}_clean_sample.csv')
     )
+    # Split train and test
     df_train, df_test = split_train_test_panel(df, train_ratio=0.8)
     # Build features for train and test
     df_train_feats, _features2scale = build_features(df_train, lags=3, split="train")
@@ -54,7 +59,7 @@ def stocks_forecasting_training_pipeline() -> None:
     scores = evaluate_all(
         estimator, X_train, y_train, X_test, y_test, df, sample_tickers
     )
-    print(scores)
+    logger.info(scores)
 
 
 if __name__ == "__main__":

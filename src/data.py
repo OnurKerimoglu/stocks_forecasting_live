@@ -3,11 +3,11 @@ from datetime import datetime
 
 import kaggle
 import pandas as pd
-from prefect import task
+from prefect import get_run_logger, task
 from statsmodels.tsa.deterministic import CalendarFourier, DeterministicProcess
 
 
-@task(task_run_name='load_raw_data')
+@task(task_run_name='load_raw_data', retries=2, retry_delay_seconds=5)
 def load_raw_data(datapath: str, user: str, datasetname: str) -> pd.DataFrame:
     """
     Loads raw data from a specified dataset using the Kaggle API.
@@ -30,8 +30,8 @@ def load_raw_data(datapath: str, user: str, datasetname: str) -> pd.DataFrame:
     pd.DataFrame
         A DataFrame containing the raw data from the dataset.
     """
-
-    print(f"rootpath: {datapath}")
+    logger = get_run_logger()
+    logger.info(f"rootpath: {datapath}")
 
     os.makedirs(datapath, exist_ok=True)
     if not os.path.exists(os.path.join(datapath, "World-Stock-Prices-Dataset.csv")):
@@ -39,12 +39,12 @@ def load_raw_data(datapath: str, user: str, datasetname: str) -> pd.DataFrame:
             dataset=f"{user}/{datasetname}", path=datapath, unzip=True
         )
     else:
-        print(f"Raw data already found in location {datapath}")
+        logger.info(f"Raw data already found in location {datapath}")
 
     raw_fpath = os.listdir(datapath)[0]
     raw_fpath_full = os.path.join(datapath, raw_fpath)
 
-    print(f"reading raw data from: {raw_fpath_full}")
+    logger.info(f"reading raw data from: {raw_fpath_full}")
     df_raw = pd.read_csv(raw_fpath_full)
     return df_raw
 
@@ -68,7 +68,7 @@ def clean_raw_data(df_raw: pd.DataFrame) -> pd.DataFrame:
         where 'returns' represents the percentage change in 'Close' prices, winsorized
         to remove extreme outliers.
     """
-
+    logger = get_run_logger()
     df_clean = df_raw.copy()
     df_clean["Date"] = pd.to_datetime(df_clean["Date"], utc=True).dt.tz_convert(None)
     df_clean.drop_duplicates(subset=["Date", "Ticker"], keep="first", inplace=True)
@@ -78,7 +78,7 @@ def clean_raw_data(df_raw: pd.DataFrame) -> pd.DataFrame:
         df_clean["returns"].quantile(0.01),
         df_clean["returns"].quantile(0.99),
     )
-    print(
+    logger.info(
         f"The returns are winsorized with upper and lower caps of respectively {upper} and {lower}"
     )
     df_clean["returns"] = df_clean["returns"].clip(lower, upper)
@@ -117,20 +117,21 @@ def sample_tickers_dates(
     pd.DataFrame
         A new DataFrame with the sampled data, sorted by 'Ticker' and 'Date'.
     """
+    logger = get_run_logger()
     if tickers is None:
         df_clean_sample = df_clean.copy()
     else:
-        print(f"Sampling tickers: {tickers}")
+        logger.info(f"Sampling tickers: {tickers}")
         df_clean_sample = df_clean[(df_clean["Ticker"].isin(tickers))].copy()
     if startdate is not None:
-        print(f"Sampling from start date: {startdate}")
+        logger.info(f"Sampling from start date: {startdate}")
         df_clean_sample = df_clean_sample[df_clean_sample["Date"] >= startdate].copy()
     # df_clean_sample.Date = pd.to_datetime(df_clean_sample['Date'])
-    # print(f'sample shape: {df_clean_sample.shape}')
+    # logger.info(f'sample shape: {df_clean_sample.shape}')
     # df_clean_sample.sort_values('Date', ascending=True).head()
     if clean_sample_fpath_full is not None:
         df_clean_sample.to_csv(clean_sample_fpath_full, index=False)
-        print(f"Wrote clean sample to: {clean_sample_fpath_full}")
+        logger.info(f"Wrote clean sample to: {clean_sample_fpath_full}")
     df_clean_sample.sort_values(["Ticker", "Date"], inplace=True)
     return df_clean_sample
 
@@ -198,6 +199,7 @@ def build_features(
     features2scale : List[str]
         List of feature names that should be scaled (e.g. by StandardScaler), depending on the model.
     """
+    logger = get_run_logger()
     feats = []
     for _ticker, grp in df_in.groupby("Ticker"):
         df = grp.sort_values("Date").copy()
@@ -301,7 +303,7 @@ def build_features(
 
     # Concatenate all ticker dataframes
     df_out = pd.concat(feats, ignore_index=True)
-    # print(f'Built features: {df_out.columns}')
+    logger.info(f'Built features: {df_out.columns}')
 
     return df_out, features_to_scale
 
@@ -364,6 +366,7 @@ def create_X_y_multistep(
         A DataFrame with each column corresponding to a future step's target
         values. The index is a MultiIndex of Ticker and Date.
     """
+    logger = get_run_logger()
     y_list = []
     X_list = []
     # loop over tickers to create multistep targets
@@ -380,7 +383,7 @@ def create_X_y_multistep(
         y_multi["Date"] = X["Date"]
         # check whether anything left from X and y_multi after droppping Nas
         if y_multi.shape[0] == 0 or X.shape[0] == 0:
-            print(f"For ticker: {ticker}, no data left after dropping NaNs.")
+            logger.info(f"For ticker: {ticker}, no data left after dropping NaNs.")
         else:
             y_list.append(y_multi)
             X_list.append(X)
@@ -392,7 +395,7 @@ def create_X_y_multistep(
         y_multi_all = pd.concat(y_list)
         X_all = pd.concat(X_list)
         if verbose:
-            print(f"X shape: {X_all.shape}, y_multi shape: {y_multi_all.shape}")
+            logger.info(f"X shape: {X_all.shape}, y_multi shape: {y_multi_all.shape}")
         X_all.set_index(["Ticker", "Date"], inplace=True)
         y_multi_all.set_index(["Ticker", "Date"], inplace=True)
         return X_all, y_multi_all
