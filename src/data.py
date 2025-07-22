@@ -3,9 +3,11 @@ from datetime import datetime
 
 import kaggle
 import pandas as pd
+from prefect import task
 from statsmodels.tsa.deterministic import CalendarFourier, DeterministicProcess
 
 
+@task(task_run_name='load_raw_data')
 def load_raw_data(datapath: str, user: str, datasetname: str) -> pd.DataFrame:
     """
     Loads raw data from a specified dataset using the Kaggle API.
@@ -47,6 +49,7 @@ def load_raw_data(datapath: str, user: str, datasetname: str) -> pd.DataFrame:
     return df_raw
 
 
+@task(task_run_name='clean_raw_data')
 def clean_raw_data(df_raw: pd.DataFrame) -> pd.DataFrame:
     """
     Cleans and processes raw stock price data.
@@ -83,6 +86,7 @@ def clean_raw_data(df_raw: pd.DataFrame) -> pd.DataFrame:
     return df_clean
 
 
+@task(task_run_name='sample_tickers_dates')
 def sample_tickers_dates(
     df_clean: pd.DataFrame,
     tickers: list | None = None,
@@ -131,6 +135,7 @@ def sample_tickers_dates(
     return df_clean_sample
 
 
+@task(task_run_name='split_train_test_panel')
 def split_train_test_panel(
     df: pd.DataFrame, train_ratio: float, date_col: str = "Date"
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -170,8 +175,9 @@ def split_train_test_panel(
     return df_train, df_test
 
 
+@task(task_run_name="build_features_{split}")
 def build_features(
-    df_in: pd.DataFrame, lags: int = 3
+    df_in: pd.DataFrame, lags: int = 3, split: str | None = None
 ) -> tuple[pd.DataFrame, list[str]]:
     """
     Builds features for a given panel dataframe.
@@ -274,7 +280,12 @@ def build_features(
         tf = dp.in_sample()
 
         # Select features
-        feature_cols = [*["Ticker", "Date", "returns"], *lag_feat_names, *ma_feat_names, *index_feat_names]
+        feature_cols = [
+            *["Ticker", "Date", "returns"],
+            *lag_feat_names,
+            *ma_feat_names,
+            *index_feat_names,
+        ]
         df_feat = df[feature_cols]
 
         # Merge and reset index
@@ -316,8 +327,13 @@ def make_multistep_target(y: pd.Series, steps: int) -> pd.DataFrame:
     return y_multi
 
 
+@task(task_run_name="create_X_y_multistep_{split}")
 def create_X_y_multistep(
-    df_all: pd.DataFrame, steps: int = 5, target: str = "returns", verbose: bool = False
+    df_all: pd.DataFrame,
+    steps: int = 5,
+    target: str = "returns",
+    verbose: bool = False,
+    split: str | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Creates featuress and multi-step targets.

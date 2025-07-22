@@ -1,6 +1,8 @@
 import datetime
 import os
 
+from prefect import Flow
+
 from data import (
     build_features,
     clean_raw_data,
@@ -22,7 +24,8 @@ datapath = os.path.join(rootpath, "data")
 datasetname = "world-stock-prices-daily-updating"
 
 
-def run() -> None:
+@Flow
+def stocks_forecasting_training_pipeline() -> None:
     df_raw = load_raw_data(
         datapath=datapath, user="nelgiriyewithana", datasetname=datasetname
     )
@@ -35,17 +38,19 @@ def run() -> None:
         # clean_sample_fpath_full=os.path.join(datapath, f'{datasetname}_clean_sample.csv')
     )
     df_train, df_test = split_train_test_panel(df, train_ratio=0.8)
-    df_train_feats, _features2scale = build_features(df_train, lags=3)
-    df_test_feats, _features2scale = build_features(df_test, lags=3)
+    # Build features for train and test
+    df_train_feats, _features2scale = build_features(df_train, lags=3, split="train")
+    df_test_feats, _features2scale = build_features(df_test, lags=3, split="test")
+    # Create X and y for train and test
     X_train, y_train = create_X_y_multistep(
-        df_train_feats, steps=forecast_steps, target=target
+        df_train_feats, steps=forecast_steps, target=target, split="train"
     )
     X_test, y_test = create_X_y_multistep(
-        df_test_feats, steps=forecast_steps, target=target
+        df_test_feats, steps=forecast_steps, target=target, split="test"
     )
-
+    # Instantiate and train a model
     estimator = create_fit_xgbregressor_chain(X_train, y_train)
-
+    # Evaluate the model
     scores = evaluate_all(
         estimator, X_train, y_train, X_test, y_test, df, sample_tickers
     )
@@ -53,4 +58,4 @@ def run() -> None:
 
 
 if __name__ == "__main__":
-    run()
+    stocks_forecasting_training_pipeline()

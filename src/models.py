@@ -1,10 +1,12 @@
 
 import pandas as pd
+from prefect import task
 from sklearn.metrics import root_mean_squared_error
 from sklearn.multioutput import RegressorChain
 from xgboost import XGBRegressor
 
 
+@task(task_run_name='create_fit_xgbregressor_chain')
 def create_fit_xgbregressor_chain(
     X_train: pd.DataFrame, y_train: pd.DataFrame
 ) -> RegressorChain:
@@ -41,6 +43,7 @@ def create_fit_xgbregressor_chain(
     return estimator
 
 
+@task(task_run_name='evaluate_all')
 def evaluate_all(
     estimator: RegressorChain,  # add other estimators as needed
     X_train: pd.DataFrame,
