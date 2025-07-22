@@ -38,24 +38,29 @@ def stocks_forecasting_training_pipeline() -> None:
         df_clean,
         tickers=sample_tickers if use_sample_tickers_for_training else None,
         startdate=datetime.datetime.now() - datetime.timedelta(days=365 * 5 + 1),
-        clean_sample_fpath_full=None,
-        # clean_sample_fpath_full=os.path.join(datapath, f'{datasetname}_clean_sample.csv')
+        clean_sample_fpath_full=None
     )
     # Split train and test
     df_train, df_test = split_train_test_panel(df, train_ratio=0.8)
-    # Build features for train and test
-    df_train_feats, _features2scale = build_features(df_train, lags=3, split="train")
-    df_test_feats, _features2scale = build_features(df_test, lags=3, split="test")
-    # Create X and y for train and test
-    X_train, y_train = create_X_y_multistep(
+    # Training: prepare train data and start training the model asynchronously
+    build_features_train_task = build_features.submit(df_train, lags=3, split="train")
+    df_train_feats, _features2scale = build_features_train_task.result()
+    create_X_y_multistep_train_task = create_X_y_multistep.submit(
         df_train_feats, steps=forecast_steps, target=target, split="train"
     )
-    X_test, y_test = create_X_y_multistep(
+    # Instantiate and train a model
+    X_train, y_train = create_X_y_multistep_train_task.result()
+    create_fit_xgbregressor_chain_task = create_fit_xgbregressor_chain.submit(X_train, y_train)
+
+    # Evaluate the model: prepare test data while the model is training
+    build_features_test_task = build_features.submit(df_test, lags=3, split="test")
+    df_test_feats, _features2scale = build_features_test_task.result()
+    create_X_y_multistep_test_task = create_X_y_multistep.submit(
         df_test_feats, steps=forecast_steps, target=target, split="test"
     )
-    # Instantiate and train a model
-    estimator = create_fit_xgbregressor_chain(X_train, y_train)
-    # Evaluate the model
+    X_test, y_test = create_X_y_multistep_test_task.result()
+    estimator = create_fit_xgbregressor_chain_task.result()
+    # Once the estimator and data are ready, evaluate the model
     scores = evaluate_all(
         estimator, X_train, y_train, X_test, y_test, df, sample_tickers
     )
@@ -64,3 +69,10 @@ def stocks_forecasting_training_pipeline() -> None:
 
 if __name__ == "__main__":
     stocks_forecasting_training_pipeline()
+    # stocks_forecasting_training_pipeline.deploy(
+    #     name="stocks_forecasting_train",
+    #     work_pool_name="stocks_forecasting_live_local",
+    #     image="my-image",
+    #     push=False,
+    #     # cron="* * * * *",
+    # )
