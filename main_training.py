@@ -8,14 +8,16 @@ from data import (
     clean_raw_data,
     create_X_y_multistep,
     load_raw_data,
+    remove_raw_data,
     sample_tickers_dates,
     split_train_test_panel,
 )
 from models import create_fit_xgbregressor_chain, evaluate_all
 
 # Configuration parameters
-sample_tickers = ["AAPL", "AMZN"]
+test_mode = True
 use_sample_tickers_for_training = True
+sample_tickers = ["AAPL", "AMZN"]
 target = "returns"
 forecast_steps = 5
 
@@ -65,6 +67,12 @@ def stocks_forecasting_training_pipeline() -> None:
         estimator, X_train, y_train, X_test, y_test, df, sample_tickers
     )
     logger.info(scores)
+
+    # cleanup
+    if not test_mode:
+        remove_raw_data(datapath)
+    else:
+        logger.info("Running in test mode, therefore not removing raw data")
 
 
 if __name__ == "__main__":

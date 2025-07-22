@@ -31,7 +31,7 @@ def load_raw_data(datapath: str, user: str, datasetname: str) -> pd.DataFrame:
         A DataFrame containing the raw data from the dataset.
     """
     logger = get_run_logger()
-    logger.info(f"rootpath: {datapath}")
+    logger.info(f"datapath: {datapath}")
 
     os.makedirs(datapath, exist_ok=True)
     if not os.path.exists(os.path.join(datapath, "World-Stock-Prices-Dataset.csv")):
@@ -47,6 +47,28 @@ def load_raw_data(datapath: str, user: str, datasetname: str) -> pd.DataFrame:
     logger.info(f"reading raw data from: {raw_fpath_full}")
     df_raw = pd.read_csv(raw_fpath_full)
     return df_raw
+
+
+@task(task_run_name='remove_raw_data')
+def remove_raw_data(datapath: str) -> None:
+    """
+    Removes the raw data from the specified path if it exists.
+
+    Args:
+    datapath : str
+        The directory path where the raw data is stored.
+
+    Returns:
+    None
+    """
+    logger = get_run_logger()
+
+    raw_data_fpath = os.path.join(datapath, "World-Stock-Prices-Dataset.csv")
+    if os.path.exists(raw_data_fpath):
+        logger.info(f'Removing the raw data @ {raw_data_fpath}')
+        os.remove(raw_data_fpath)
+    else:
+        logger.info(f'Raw data not found @ {raw_data_fpath}')
 
 
 @task(task_run_name='clean_raw_data')
@@ -303,7 +325,8 @@ def build_features(
 
     # Concatenate all ticker dataframes
     df_out = pd.concat(feats, ignore_index=True)
-    logger.info(f'Built features: {df_out.columns}')
+    built_features = ', '.join(df_out.columns)
+    logger.info(f'Built features: {built_features}')
 
     return df_out, features_to_scale
 
