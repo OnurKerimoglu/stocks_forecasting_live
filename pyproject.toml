@@ -14,3 +14,56 @@ dependencies = [
     "statsmodels>=0.14.5",
     "xgboost>=3.0.2",
 ]
+
+[tool.uv]
+
+[tool.ruff]
+# Base settings for both linting and formatting
+line-length = 88 # Black's default line length
+target-version = "py311" # Match your project's minimum Python version
+preview = true # Enable preview features for both linter and formatter
+
+# Exclude directories/files from both linting and formatting
+exclude = [
+    ".git",
+    "__pycache__",
+    "build",
+    "dist",
+    ".venv",
+    # Add any other directories/files you want to ignore
+]
+
+# Linting specific settings
+[tool.ruff.lint]
+# Select a good set of common and useful rule groups.
+# Ruff automatically disables stylistic rules that conflict with its formatter.
+select = [
+    "E",   # pycodestyle errors
+    "F",   # Pyflakes errors (unused imports, undefined names, etc.)
+    "W",   # pycodestyle warnings (e.g., whitespace issues)
+    "I",   # isort (import sorting)
+    # "N",   # pep8-naming (variable and function naming conventions)
+    # "D",   # pydocstyle (docstring style) - often needs customization
+    "UP",  # pyupgrade (suggestions for more modern Python syntax)
+    "B",   # flake8-bugbear (common bugs and bad patterns)
+    "ANN", # flake8-annotations (enforce type hints)
+    "ASYNC", # flake8-async (asyncio specific checks)
+    "PERF", # perflint (performance-related suggestions)
+    "RUF", # Ruff-specific rules (e.g., redundant-fstring-prefix)
+    "TID", # flake8-tidy-imports (restrict certain imports)
+    "ERA", # eradicate (commented-out code)
+]
+
+# Rules to ignore (commonly ignored for practical reasons)
+ignore = [
+    "E501", # Line too long (Ruff's formatter handles this, so linting it is redundant)
+    "D100", # Missing docstring in public module (often noisy for small scripts)
+    "D104", # Missing docstring in public package (similar to D100)
+    "D105", # Missing docstring in magic method (can be noisy)
+    "D107", # Missing docstring in __init__ (often fine to omit)
+    "ERA001", # Commented out code (use version control instead)
+    "N803" # Argument name should be lowercase (Ruff's default)
+]
+
+# Enable autofix for all fixable rules by default when `ruff check --fix` is run
+fixable = ["ALL"]
