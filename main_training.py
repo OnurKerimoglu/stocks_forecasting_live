@@ -226,5 +226,5 @@ def register_best_model(only_latest: bool = True) -> None:
 
 if __name__ == "__main__":
     stocks_forecasting_training_flow(
-        test_mode=True, use_sample_tickers_for_training=True
+        test_mode=True, use_sample_tickers_for_training=True, select_only_latest=True
     )
