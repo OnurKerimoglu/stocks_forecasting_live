@@ -1,0 +1,7 @@
+factor_levels:
+  CldrFeats:
+    - true
+    - false
+  ModReg:
+    - true
+    - false
