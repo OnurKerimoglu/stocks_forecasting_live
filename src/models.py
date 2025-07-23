@@ -7,7 +7,7 @@ from xgboost import XGBRegressor
 
 @task(task_run_name="create_fit_xgbregressor_chain")
 def create_fit_xgbregressor_chain(
-    X_train: pd.DataFrame, y_train: pd.DataFrame
+    X_train: pd.DataFrame, y_train: pd.DataFrame, Regularization: bool = True
 ) -> RegressorChain:
     """
     Instantiates and trains an XGBoost RegressorChain model on the provided training data.
@@ -21,22 +21,40 @@ def create_fit_xgbregressor_chain(
         The input features for training the model.
     y_train : pd.DataFrame or np.ndarray
         The target values corresponding to the input features.
+    Regularization: bool
+        If True, applies regularization to the XGBoost model.
 
     Returns:
     RegressorChain
         A fitted RegressorChain model using the XGBoost regressor as the base estimator.
     """
     logger = get_run_logger()
-    xgb = XGBRegressor(
-        objective="reg:squarederror",
-        n_estimators=500,  # large upper bound
-        learning_rate=0.05,
-        subsample=0.8,
-        colsample_bytree=0.8,
-        reg_alpha=1e-2,
-        reg_lambda=1.0,
-        random_state=42,
-    )
+    if Regularization:
+        logger.info("Instantiating a regularized XGBoost regressor")
+        xgb = XGBRegressor(
+            objective="reg:squarederror",
+            n_estimators=500,  # large upper bound
+            learning_rate=0.05,
+            max_depth=6,
+            subsample=0.8,
+            colsample_bytree=0.8,
+            reg_alpha=1e-2,
+            reg_lambda=1.0,
+            random_state=42,
+        )
+    else:
+        logger.info("Instantiating a non-regularized XGBoost regressor")
+        xgb = XGBRegressor(
+            objective="reg:squarederror",
+            n_estimators=500,  # Keep a large upper bound, but expect it to overfit quicker
+            learning_rate=0.05,  # Slightly increased or kept the same to allow more aggressive learning
+            max_depth=10,  # Significantly deeper trees
+            subsample=1.0,  # Use all training samples for each tree
+            colsample_bytree=1.0,  # Use all features for each tree
+            reg_alpha=0,  # No L1 regularization
+            reg_lambda=0,  # No L2 regularization
+            random_state=42,
+        )
     estimator = RegressorChain(estimator=xgb)
     logger.info("Training the model..")
     estimator.fit(X_train, y_train)
