@@ -225,6 +225,10 @@ def build_features(
     """
     logger = get_run_logger()
     feats = []
+    if CldrFeats:
+        logger.info("Calendar features will be included")
+    else:
+        logger.info("Calendar features will NOT be included")
     for _ticker, grp in df_in.groupby("Ticker"):
         df = grp.sort_values("Date").copy()
 
@@ -303,7 +307,6 @@ def build_features(
 
         # Calendar Features
         if CldrFeats:
-            logger.info("Calendar features will be included")
             dp = DeterministicProcess(
                 index=df.index,
                 constant=False,
@@ -324,7 +327,6 @@ def build_features(
                 [df_feat.reset_index(drop=True), tf.reset_index(drop=True)], axis=1
             )
         else:
-            logger.info("Calendar features will NOT be included")
             df_feat = df_feat.reset_index().drop(columns=["Period"])
             merged = df_feat
 
