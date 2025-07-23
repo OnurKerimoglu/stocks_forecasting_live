@@ -22,14 +22,21 @@ Notes:
 - [pre-commit](https://pre-commit.com/) hooks will be enabled by the last command above. Only the default hooks, private key detection and linting/formatting hooks are specified (see the [config](.pre-commit-config.yaml))
 
 ### Running the Training Pipeline
-**Workflow orchestration** is handled by [prefect](https://www.prefect.io/) (will be installed as a dependency). The workflow deployment comprise the following steps:
-- Start the prefect server: activate the .project venv on a terminal (see above), and issue `make prefect_serve` and on a browser, navigate to `http://localhost:8080` for the GUI.
-- Create a work pool: once the prefect server is running (previous step), open a new terminal, after activating the project venv, issue: `make prefect_create_workpool`. Note that this step is required only once, and will actually return an error if repeated
-- Deploy the training workflow and start the worker: once the server has started and a worker pool is created (previous 2 steps), issue `make prefect_deploy_train train_deployment_mode=dev`. Note that this command will call the [deploy_training_worfklow.py](deploy_training_workflow.py) script, which in turn will deploy the training workflow from the local filesystem as train_deployment_mode=dev in the make command (if train_deployment_mode=prod, the deployment will be made from (this) git repository, 'prod' branch. The deployed workflow can be seen in the GUI, Deployments tab, with 'Ready' status, once the worker has started (may take a few seconds)
 
-If the deploy_training_workflow.py is not changed before deployment, the workflow will be deployed in dev mode, and without schedules, otherwise with a weekly schedule. In any case, a manual run can be triggered, e.g., on the GUI, Deployments tab, 'Play' button on the top-right corner. Two parameters can be optionally set via 'Custom Run':
+#### Initiating the Orchestrator
+is handled by [prefect](https://www.prefect.io/) (will be installed as a dependency). The workflow deployment comprise the following steps:
+- Start the prefect server: activate the .project venv on a terminal (see above), and issue `make prefect_serve` (see the [Makefile](Makefile)). Then on a browser, navigate to `http://localhost:8080` to access the GUI.
+- Create a work pool: once the prefect server is running (previous step), open a new terminal, after activating the project venv, issue: `make prefect_create_workpool`. Note that this step is required only once, and will actually return an error if repeated
+- Deploy the training workflow and start the worker: once the server has started and a worker pool is created (previous 2 steps), issue `make prefect_deploy_train train_deployment_mode=dev`. Note that this command will call the [deploy_training_worfklow.py](deploy_training_workflow.py) script, which in turn will deploy the training workflow from the local filesystem as train_deployment_mode=dev in the make command (if train_deployment_mode=prod, the deployment will be made from (this) git repository, 'prod' branch. The deployed workflow can be seen in the GUI, Deployments tab, with 'Ready' status, once the worker has started (may take a few seconds).
+
+To stop the worker, and the prefect server, hit Ctrl+C in the respective terminals. See [here](./documentation/documentation.md#workflow-orchestration) for the details on workflow orchestration.
+
+#### Experiment Tracking and Model Registry
+is handled by [mlflow](https://mlflow.org/). To activate mlflow server, simply open a new terminal, activate the venv and issue `make mlflow_serve` (see the [Makefile](Makefile)). On a browser, navigate to `http://localhost:5000` to access the Mlflow GUI. To stop the server, hit Ctrl+C on the terminal.  See [here](./documentation/documentation.md#experiment-tracking-and-model-registry) for the details on experiment tracking and model registry.
+
+#### Manually Triggering an Experiment on the Training Pipeline
+
+If the deploy_training_workflow.py is not changed before deployment, the workflow will be deployed in dev mode, and without schedules, otherwise with a weekly schedule. In any case, a manual run can be triggered, e.g., on the GUI, Deployments tab, 'Play' button on the top-right corner. Three parameters can be optionally set via 'Custom Run':
   - test_mode (default: True): raw_data will not be removed after execution
   - use_sample_tickers_for_training (default: True): Only two tickers (['AMZN', 'APPL']) will be used to train the model (these two tickers will be used for the model evaluation anyway, independent of the selection here)
-- To stop the worker, and the prefect server, hit Ctrl+C in the respective terminals
-
-See [here](./documentation/documentation.md#workflow-orchestration) for the details on workflow orchestration.
+  - select_only_latest (default: True): if True, the best model run will be selected only among runs from the current date, i.e., ignoring the previous runs
