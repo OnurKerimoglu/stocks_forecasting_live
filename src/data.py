@@ -200,7 +200,7 @@ def split_train_test_panel(
 
 @task(task_run_name="build_features_{split}")
 def build_features(
-    df_in: pd.DataFrame, lags: int = 3, split: str | None = None
+    df_in: pd.DataFrame, lags: int = 3, split: str | None = None, CldrFeats: bool = True
 ) -> tuple[pd.DataFrame, list[str]]:
     """
     Builds features for a given panel dataframe.
@@ -214,6 +214,8 @@ def build_features(
         Input panel dataframe with columns 'Ticker', 'Date', 'Close', 'returns'.
     lags : int, optional
         Number of lagged features to generate. Defaults to 3.
+    CldrFeats: bool, optional
+        Whether to include the Calendear Features
 
     Returns:
     df_out : pd.DataFrame
@@ -286,22 +288,9 @@ def build_features(
         index_feat_names += ["ROC_10"]
         features_to_scale += ["ROC_10"]
 
-        # Trend + seasonality
+        # might be needed for aligning with calendar features
         df["Period"] = df["Date"].dt.to_period("D")
         df = df.set_index("Period")
-        dp = DeterministicProcess(
-            index=df.index,
-            constant=False,
-            order=0,  # no trend
-            seasonal=False,  # no additional seasonality terms
-            additional_terms=[
-                # CalendarFourier(freq='YE', order=1),
-                # CalendarFourier(freq='QE', order=1),
-                CalendarFourier(freq="ME", order=1),
-                CalendarFourier(freq="W", order=1),
-            ],
-        )
-        tf = dp.in_sample()
 
         # Select features
         feature_cols = [
@@ -312,11 +301,32 @@ def build_features(
         ]
         df_feat = df[feature_cols]
 
-        # Merge and reset index
-        df_feat = df_feat.reset_index().drop(columns=["Period"])
-        merged = pd.concat(
-            [df_feat.reset_index(drop=True), tf.reset_index(drop=True)], axis=1
-        )
+        # Calendar Features
+        if CldrFeats:
+            logger.info("Calendar features will be included")
+            dp = DeterministicProcess(
+                index=df.index,
+                constant=False,
+                order=0,  # no trend
+                seasonal=False,  # no additional seasonality terms
+                additional_terms=[
+                    # CalendarFourier(freq='YE', order=1),
+                    # CalendarFourier(freq='QE', order=1),
+                    CalendarFourier(freq="ME", order=1),
+                    CalendarFourier(freq="W", order=1),
+                ],
+            )
+            tf = dp.in_sample()
+
+            # Merge and reset index
+            df_feat = df_feat.reset_index().drop(columns=["Period"])
+            merged = pd.concat(
+                [df_feat.reset_index(drop=True), tf.reset_index(drop=True)], axis=1
+            )
+        else:
+            logger.info("Calendar features will NOT be included")
+            df_feat = df_feat.reset_index().drop(columns=["Period"])
+            merged = df_feat
 
         # Drop rows with any NaNs
         merged = merged.dropna().reset_index(drop=True)
