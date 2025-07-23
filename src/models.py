@@ -1,4 +1,3 @@
-
 import pandas as pd
 from prefect import get_run_logger, task
 from sklearn.metrics import root_mean_squared_error
@@ -6,7 +5,7 @@ from sklearn.multioutput import RegressorChain
 from xgboost import XGBRegressor
 
 
-@task(task_run_name='create_fit_xgbregressor_chain')
+@task(task_run_name="create_fit_xgbregressor_chain")
 def create_fit_xgbregressor_chain(
     X_train: pd.DataFrame, y_train: pd.DataFrame
 ) -> RegressorChain:
@@ -39,13 +38,13 @@ def create_fit_xgbregressor_chain(
         random_state=42,
     )
     estimator = RegressorChain(estimator=xgb)
-    logger.info('Training the model..')
+    logger.info("Training the model..")
     estimator.fit(X_train, y_train)
-    logger.info('Training finalized.')
+    logger.info("Training finalized.")
     return estimator
 
 
-@task(task_run_name='evaluate_all')
+@task(task_run_name="evaluate_all")
 def evaluate_all(
     estimator: RegressorChain,  # add other estimators as needed
     X_train: pd.DataFrame,
@@ -100,8 +99,8 @@ def evaluate_all(
             y_test_hat_df.loc[ticker],
             df_indexed,
         )
-    train_rmse = scores['overall']['train_rmse']
-    test_rmse = scores['overall']['test_rmse']
+    train_rmse = scores["overall"]["train_rmse"]
+    test_rmse = scores["overall"]["test_rmse"]
     logger.info(f"Train RMSE: {train_rmse:.5f}; Test RMSE: {test_rmse:.5f}")
     return scores
 

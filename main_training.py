@@ -17,9 +17,8 @@ from models import create_fit_xgbregressor_chain, evaluate_all
 
 @Flow
 def stocks_forecasting_training_flow(
-    test_mode: bool = True,
-    use_sample_tickers_for_training: bool = True
-    ) -> None:
+    test_mode: bool = True, use_sample_tickers_for_training: bool = True
+) -> None:
     """
     The main training workflow for the stocks forecasting project.
 
@@ -50,7 +49,9 @@ def stocks_forecasting_training_flow(
 
     # get the raw data
     df_raw = load_raw_data(
-        datapath=datapath, user="nelgiriyewithana", datasetname="world-stock-prices-daily-updating"
+        datapath=datapath,
+        user="nelgiriyewithana",
+        datasetname="world-stock-prices-daily-updating",
     )
     # clean the raw data (e.g. winsorize returns)
     df_clean = clean_raw_data(df_raw)
@@ -59,7 +60,7 @@ def stocks_forecasting_training_flow(
         df_clean,
         tickers=sample_tickers if use_sample_tickers_for_training else None,
         startdate=datetime.datetime.now() - datetime.timedelta(days=365 * 5 + 1),
-        clean_sample_fpath_full=None
+        clean_sample_fpath_full=None,
     )
     # Split train and test
     df_train, df_test = split_train_test_panel(df, train_ratio=0.8)
@@ -71,7 +72,9 @@ def stocks_forecasting_training_flow(
     )
     # Instantiate and train a model
     X_train, y_train = create_X_y_multistep_train_task.result()
-    create_fit_xgbregressor_chain_task = create_fit_xgbregressor_chain.submit(X_train, y_train)
+    create_fit_xgbregressor_chain_task = create_fit_xgbregressor_chain.submit(
+        X_train, y_train
+    )
 
     # Evaluate the model: prepare test data while the model is training
     build_features_test_task = build_features.submit(df_test, lags=3, split="test")
@@ -96,6 +99,5 @@ def stocks_forecasting_training_flow(
 
 if __name__ == "__main__":
     stocks_forecasting_training_flow(
-        test_mode=True,
-        use_sample_tickers_for_training=True
+        test_mode=True, use_sample_tickers_for_training=True
     )

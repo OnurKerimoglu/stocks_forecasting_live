@@ -7,7 +7,7 @@ from prefect import get_run_logger, task
 from statsmodels.tsa.deterministic import CalendarFourier, DeterministicProcess
 
 
-@task(task_run_name='load_raw_data', retries=2, retry_delay_seconds=5)
+@task(task_run_name="load_raw_data", retries=2, retry_delay_seconds=5)
 def load_raw_data(datapath: str, user: str, datasetname: str) -> pd.DataFrame:
     """
     Loads raw data from a specified dataset using the Kaggle API.
@@ -49,7 +49,7 @@ def load_raw_data(datapath: str, user: str, datasetname: str) -> pd.DataFrame:
     return df_raw
 
 
-@task(task_run_name='remove_raw_data')
+@task(task_run_name="remove_raw_data")
 def remove_raw_data(datapath: str) -> None:
     """
     Removes the raw data from the specified path if it exists.
@@ -65,13 +65,13 @@ def remove_raw_data(datapath: str) -> None:
 
     raw_data_fpath = os.path.join(datapath, "World-Stock-Prices-Dataset.csv")
     if os.path.exists(raw_data_fpath):
-        logger.info(f'Removing the raw data @ {raw_data_fpath}')
+        logger.info(f"Removing the raw data @ {raw_data_fpath}")
         os.remove(raw_data_fpath)
     else:
-        logger.info(f'Raw data not found @ {raw_data_fpath}')
+        logger.info(f"Raw data not found @ {raw_data_fpath}")
 
 
-@task(task_run_name='clean_raw_data')
+@task(task_run_name="clean_raw_data")
 def clean_raw_data(df_raw: pd.DataFrame) -> pd.DataFrame:
     """
     Cleans and processes raw stock price data.
@@ -108,7 +108,7 @@ def clean_raw_data(df_raw: pd.DataFrame) -> pd.DataFrame:
     return df_clean
 
 
-@task(task_run_name='sample_tickers_dates')
+@task(task_run_name="sample_tickers_dates")
 def sample_tickers_dates(
     df_clean: pd.DataFrame,
     tickers: list | None = None,
@@ -158,7 +158,7 @@ def sample_tickers_dates(
     return df_clean_sample
 
 
-@task(task_run_name='split_train_test_panel')
+@task(task_run_name="split_train_test_panel")
 def split_train_test_panel(
     df: pd.DataFrame, train_ratio: float, date_col: str = "Date"
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -325,8 +325,8 @@ def build_features(
 
     # Concatenate all ticker dataframes
     df_out = pd.concat(feats, ignore_index=True)
-    built_features = ', '.join(df_out.columns)
-    logger.info(f'Built features: {built_features}')
+    built_features = ", ".join(df_out.columns)
+    logger.info(f"Built features: {built_features}")
 
     return df_out, features_to_scale
 
