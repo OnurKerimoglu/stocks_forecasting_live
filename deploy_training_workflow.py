@@ -1,3 +1,4 @@
+import os
 from datetime import datetime, timedelta
 
 from prefect import Flow
@@ -7,20 +8,25 @@ from prefect.schedules import Interval
 
 def main(mode: str) -> None:
     if mode == "prod":
-        branch = "prod"
+        print(
+            f"deploying the train pipeline in {args.mode} mode from git repository and with schedule"
+        )
         schedule = Interval(
             timedelta(weeks=1),
             anchor_date=datetime(2025, 7, 22, 0, 0),
             timezone="Germany/Berlin",
         )
+        source = GitRepository(
+            url="https://github.com/OnurKerimoglu/stocks_forecasting_live.git",
+            branch="prod",
+        )
     elif mode == "dev":
-        branch = "dev"
+        print(
+            f"deploying the train pipeline in {args.mode} mode from local filesystem and without schedule"
+        )
         schedule = None
-
-    source = GitRepository(
-        url="https://github.com/OnurKerimoglu/stocks_forecasting_live.git",
-        branch=branch,
-    )
+        # source is the local file system
+        source = os.path.dirname(__file__)
 
     Flow.from_source(
         source=source, entrypoint="main_training.py:stocks_forecasting_training_flow"
@@ -32,8 +38,14 @@ def main(mode: str) -> None:
 
 
 if __name__ == "__main__":
-    main(mode="dev")
-    # main(mode="prod")
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Deploy the train workflow to prefect")
+    parser.add_argument(
+        "--mode", type=str, required=False, help="dev or prod", default="dev"
+    )
+    args = parser.parse_args()
+    main(mode=args.mode)
 
 
 # stocks_forecasting_training_flow.serve(
