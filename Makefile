@@ -15,3 +15,6 @@ prefect_create_workpool:
 prefect_deploy_train:
 	python deploy_training_workflow.py --mode ${train_deployment_mode}
 	prefect worker start --pool "stocks_forecasting_live_local"
+
+mlflow_serve:
+	mlflow server --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./artifacts
