@@ -1,20 +1,16 @@
 import datetime
-import os
 
 import mlflow
 import numpy as np
 import pandas as pd
+import yfinance as yf
 from mlflow.tracking import MlflowClient
 from xgboost import XGBRegressor
 
-# from data import build_features, create_X_y_multistep
 from data import (
     build_features,
     clean_raw_data,
     create_X_y_multistep,
-    load_raw_data,
-    sample_tickers_dates,
-    split_train_test_panel,
 )
 
 # Global parameters
@@ -26,7 +22,7 @@ MODEL_ALIAS = "champion"
 
 def main(ticker: str) -> None:
     model, params = retrieve_registered_model()
-    df_init = retrieve_init_data_temp(ticker)
+    df_init = retrieve_init_data(ticker)
     last_day, forecast = direct_multistep_forecast(model, params, df_init)
     print(f"last day:\n{last_day}\nforecast:\n{forecast}")
 
@@ -36,36 +32,45 @@ def retrieve_registered_model() -> tuple:
     model_uri = f"models:/{REGISTRY_NAME}@{MODEL_ALIAS}"
     print("Retrieveing model_uri: ", model_uri)
     model = mlflow.sklearn.load_model(model_uri)
-
+    # Get the parameters
     mv = CLIENT.get_model_version_by_alias(name=REGISTRY_NAME, alias=MODEL_ALIAS)
     run = CLIENT.get_run(mv.run_id)
     params = run.data.params
-
     return model, params
 
 
-def retrieve_init_data_temp(ticker: str) -> pd.DataFrame:
-    ROOTPATH = os.path.dirname(__file__)
-    DATAPATH = os.path.join(ROOTPATH, "data")
-    # load the raw data
-    df_raw = load_raw_data(
-        datapath=DATAPATH,
-        user="nelgiriyewithana",
-        datasetname="world-stock-prices-daily-updating",
-    )
+def retrieve_init_data(ticker: str) -> pd.DataFrame:
+    # download the raw data
+    df_raw = download_raw_data_from_yf(ticker=ticker)
     # clean the raw data (e.g. winsorize returns)
-    df_clean = clean_raw_data(df_raw)
-    # sample tickers and dates
-    df = sample_tickers_dates(
-        df_clean,
-        tickers=[ticker],
-        startdate=datetime.datetime.now() - datetime.timedelta(days=365 * 5 + 1),
-        clean_sample_fpath_full=None,
-    )
-    # Split train and test
-    _df_train, df_test = split_train_test_panel(df, train_ratio=0.8)
-    df_test_raw_last = df_test[df_test["Ticker"] == ticker].copy()
-    return df_test_raw_last
+    df = clean_raw_data(df_raw)
+    df.sort_values(["Date"], inplace=True)
+    # print(f'Columns: {df.columns}')
+    return df
+
+
+def download_raw_data_from_yf(ticker: str) -> pd.DataFrame:
+    period_start = datetime.datetime.now() - datetime.timedelta(days=100)
+    print(f"Fetching price data for {ticker}")
+    try:
+        df = yf.download(
+            ticker, start=period_start, end=datetime.datetime.now(), interval="1d"
+        )
+    except Exception as e:
+        raise e from ValueError(f"Failed to fetch data for {ticker}")
+
+    # Get rid of the redundant Ticker index
+    df.columns = df.columns.droplevel("Ticker")
+    # Re-introduce the ticker as a regular column
+    df["Ticker"] = ticker
+    # Make 'Date' a regular column by resetting the index
+    df.reset_index(inplace=True)
+
+    if df.shape[0] > 0:
+        print(f"Fetched {df.shape[0]} rows for {ticker}")
+    else:
+        raise ValueError(f"No valid raws in fetched data for {ticker}")
+    return df
 
 
 def direct_multistep_forecast(
@@ -116,7 +121,9 @@ def direct_multistep_forecast(
 
     result = pd.concat([returns_series, prices_series], axis=1)
 
-    return result.iloc[[0], :], result.iloc[1:, :]
+    last = result.iloc[[0], :]
+    forecast = result.iloc[1:, :]
+    return last, forecast
 
 
 if __name__ == "__main__":

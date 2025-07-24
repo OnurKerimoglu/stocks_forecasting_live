@@ -16,6 +16,7 @@ dependencies = [
     "statsmodels>=0.14.5",
     "tomli>=2.2.1",
     "xgboost>=3.0.2",
+    "yfinance>=0.2.65",
 ]
 
 [tool.uv]
