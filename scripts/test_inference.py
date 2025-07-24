@@ -27,4 +27,17 @@ def main(url: str, ticker: str) -> None:
 
 
 if __name__ == "__main__":
-    main(url="http://localhost:9696/forecast", ticker="AMZN")
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Test the forecasting endpoint. Example use: python scripts/test_inference.py --ticker AMZN"
+    )
+    parser.add_argument(
+        "--ticker",
+        type=str,
+        required=False,
+        help="ticker symbol, e.g., 'AMZN",
+        default="AMZN",
+    )
+    args = parser.parse_args()
+    main(url="http://localhost:9696/forecast", ticker=args.ticker)
