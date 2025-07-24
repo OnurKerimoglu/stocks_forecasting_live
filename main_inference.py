@@ -7,6 +7,7 @@ import mlflow
 import numpy as np
 import pandas as pd
 import yfinance as yf
+from flask import Flask, jsonify, request
 from mlflow.tracking import MlflowClient
 from prefect import flow, get_run_logger, task
 from xgboost import XGBRegressor
@@ -40,6 +41,7 @@ def stocks_forecasting_inference_flow(
     df_init = retrieve_ticker_data(ticker)
     last_day, forecast = run_forecast(model, params, df_init)
     logger.info(f"\nlast day:\n{last_day}\nforecast:\n{forecast}")
+    return last_day, forecast
 
 
 @task(task_run_name="retrieve_registered_model")
@@ -118,8 +120,9 @@ def run_forecast(
     bizday_offset: bool = True,
 ) -> tuple:
     # Build features on your last observed history
+    CldrFeats = parameters["CldrFeats"] if "CldrFeats" in parameters.keys() else True
     df_feats, _ = build_features(
-        df_init, lags=int(parameters["lags"]), CldrFeats=parameters["CldrFeats"]
+        df_init, lags=int(parameters["lags"]), CldrFeats=CldrFeats
     )
     # create features for the very last day, so specify only 1 step ahead in the future to avoid losing the features
     X_train, y_train = create_X_y_multistep(df_feats, steps=1, target="returns")
@@ -164,5 +167,29 @@ def run_forecast(
     return last, forecast
 
 
+app = Flask("stocks-forecasting")
+
+
+@app.route("/forecast", methods=["POST"])
+def predict_endpoint() -> dict:
+    request_json = request.get_json()
+    ticker = request_json["ticker"]
+    print(f"forecasting for: {ticker}")
+    last_day, forecast = stocks_forecasting_inference_flow(
+        ticker, use_model_registry=False
+    )
+    # make Date a column instead of the index
+    ld = last_day.reset_index()
+    fc = forecast.reset_index()
+
+    # turn each row into its own dict of { col: value, … }
+    result = {
+        "last_day": ld.to_dict(orient="records"),
+        "forecast": fc.to_dict(orient="records"),
+    }
+    return jsonify(result)
+
+
 if __name__ == "__main__":
-    stocks_forecasting_inference_flow(ticker="AAPL", use_model_registry=False)
+    # stocks_forecasting_inference_flow(ticker="AAPL", use_model_registry=False)
+    app.run(debug=True, host="0.0.0.0", port=9696)

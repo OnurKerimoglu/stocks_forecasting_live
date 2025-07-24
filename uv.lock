@@ -2735,6 +2735,7 @@ name = "stocks-forecasting-live"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "flask" },
     { name = "kaggle" },
     { name = "mlflow" },
     { name = "pandas" },
@@ -2751,6 +2752,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "flask", specifier = ">=3.1.1" },
     { name = "kaggle", specifier = ">=1.7.4.5" },
     { name = "mlflow", specifier = ">=3.1.1" },
     { name = "pandas", specifier = ">=2.3.1" },
