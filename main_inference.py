@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import yfinance as yf
 from mlflow.tracking import MlflowClient
+from prefect import flow, get_run_logger, task
 from xgboost import XGBRegressor
 
 from data import (
@@ -20,17 +21,21 @@ REGISTRY_NAME = "stocks_forecasting_candidates"  # The registry from which the m
 MODEL_ALIAS = "champion"
 
 
-def main(ticker: str) -> None:
+@flow(name="stocks_forecasting_inference_flow")
+def stocks_forecasting_inference_flow(ticker: str = "AAPL") -> None:
+    logger = get_run_logger()
     model, params = retrieve_registered_model()
-    df_init = retrieve_init_data(ticker)
-    last_day, forecast = direct_multistep_forecast(model, params, df_init)
-    print(f"last day:\n{last_day}\nforecast:\n{forecast}")
+    df_init = retrieve_ticker_data(ticker)
+    last_day, forecast = run_forecast(model, params, df_init)
+    logger.info(f"\nlast day:\n{last_day}\nforecast:\n{forecast}")
 
 
+@task(task_run_name="retrieve_registered_model")
 def retrieve_registered_model() -> tuple:
+    logger = get_run_logger()
     # Load the model from the Model Registry
     model_uri = f"models:/{REGISTRY_NAME}@{MODEL_ALIAS}"
-    print("Retrieveing model_uri: ", model_uri)
+    logger.info(f"Retrieveing model_uri: {model_uri}")
     model = mlflow.sklearn.load_model(model_uri)
     # Get the parameters
     mv = CLIENT.get_model_version_by_alias(name=REGISTRY_NAME, alias=MODEL_ALIAS)
@@ -39,22 +44,29 @@ def retrieve_registered_model() -> tuple:
     return model, params
 
 
-def retrieve_init_data(ticker: str) -> pd.DataFrame:
+@task(task_run_name="retrieve_ticker_data")
+def retrieve_ticker_data(ticker: str) -> pd.DataFrame:
     # download the raw data
-    df_raw = download_raw_data_from_yf(ticker=ticker)
+    df_raw = fetch_ticker_data_from_yf(ticker=ticker)
     # clean the raw data (e.g. winsorize returns)
     df = clean_raw_data(df_raw)
     df.sort_values(["Date"], inplace=True)
-    # print(f'Columns: {df.columns}')
     return df
 
 
-def download_raw_data_from_yf(ticker: str) -> pd.DataFrame:
+@task(task_run_name="fetch_ticker_data_from_yf", retries=2, retry_delay_seconds=1)
+def fetch_ticker_data_from_yf(ticker: str) -> pd.DataFrame:
+    logger = get_run_logger()
     period_start = datetime.datetime.now() - datetime.timedelta(days=100)
-    print(f"Fetching price data for {ticker}")
+    logger.info(f"Fetching price data for {ticker}")
     try:
         df = yf.download(
-            ticker, start=period_start, end=datetime.datetime.now(), interval="1d"
+            ticker,
+            start=period_start,
+            end=datetime.datetime.now(),
+            interval="1d",
+            auto_adjust=True,
+            progress=False,
         )
     except Exception as e:
         raise e from ValueError(f"Failed to fetch data for {ticker}")
@@ -67,13 +79,14 @@ def download_raw_data_from_yf(ticker: str) -> pd.DataFrame:
     df.reset_index(inplace=True)
 
     if df.shape[0] > 0:
-        print(f"Fetched {df.shape[0]} rows for {ticker}")
+        logger.info(f"Fetched {df.shape[0]} rows for {ticker}")
     else:
         raise ValueError(f"No valid raws in fetched data for {ticker}")
     return df
 
 
-def direct_multistep_forecast(
+@task(task_run_name="run_forecast")
+def run_forecast(
     model: XGBRegressor,
     parameters: dict,
     df_init: pd.DataFrame,
@@ -127,4 +140,4 @@ def direct_multistep_forecast(
 
 
 if __name__ == "__main__":
-    main(ticker="AAPL")
+    stocks_forecasting_inference_flow(ticker="AAPL")
