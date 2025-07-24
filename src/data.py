@@ -46,6 +46,7 @@ def load_raw_data(datapath: str, user: str, datasetname: str) -> pd.DataFrame:
 
     logger.info(f"reading raw data from: {raw_fpath_full}")
     df_raw = pd.read_csv(raw_fpath_full)
+    df_raw["Date"] = pd.to_datetime(df_raw["Date"], utc=True).dt.tz_convert(None)
     return df_raw
 
 
@@ -92,7 +93,6 @@ def clean_raw_data(df_raw: pd.DataFrame) -> pd.DataFrame:
     """
     logger = get_run_logger()
     df_clean = df_raw.copy()
-    df_clean["Date"] = pd.to_datetime(df_clean["Date"], utc=True).dt.tz_convert(None)
     df_clean.drop_duplicates(subset=["Date", "Ticker"], keep="first", inplace=True)
     df_clean = df_clean[["Date", "Close", "Ticker"]]
     df_clean["returns"] = df_clean.groupby("Ticker")["Close"].pct_change()
