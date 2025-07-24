@@ -18,3 +18,15 @@ prefect_deploy_train:
 
 mlflow_serve:
 	mlflow server --backend-store-uri sqlite:///mlflow.db --host 127.0.0.1 --port 5000 --default-artifact-root ./artifacts
+
+extract_registered_model:
+	python src/extract_mlflow_artifacts.py
+
+inference_build:
+	docker build -f Docker/Dockerfile -t stocks_forecasting_inference:v1 .
+
+inference_serve:
+	docker run -it --rm -p 9696:9696 stocks_forecasting_inference:v1
+
+inference_test:
+	python scripts/test_inference.py --ticker GOOG
