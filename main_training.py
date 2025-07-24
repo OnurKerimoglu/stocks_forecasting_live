@@ -24,15 +24,21 @@ from utils import get_pipreqs_from_pyproject
 # Global parameters
 TARGET = "returns"
 SAMPLE_TICKERS = ["AAPL", "AMZN"]
-FORECAST_STEPS = 5
 ROOTPATH = os.path.dirname(__file__)
 DATAPATH = os.path.join(ROOTPATH, "data")
 CONFPATH = os.path.join(ROOTPATH, "config")
 ISODATE = datetime.date.today().isoformat()
 
+# Static Parameters that needs to be logged with the model as they will be needed for inference
+STATIC_PARS = {
+    "lags": 3,  # number of lags to be included
+    "steps": 5,  # steps ahead to be forecasted
+}
+
 # Set up mlflow
 mlflow.set_tracking_uri("http://127.0.0.1:5000")
-ARTIFACT_PATH = "mlflow_models"
+MODEL_NAME = "mlflow_models"
+CANDIDATES_REGISTRY = "stocks_forecasting_candidates"
 CLIENT = MlflowClient()
 EXPS, EXP_NAME = build_exp_dicts(os.path.join(CONFPATH, "Exp_CldrFeats_ModReg.yaml"))
 mlflow.set_experiment(EXP_NAME)
@@ -137,15 +143,16 @@ def run_single_experiment(
     with mlflow.start_run(run_name=run_name):
         mlflow.set_tag("run_date", ISODATE)
         mlflow.log_params(exp)
+        mlflow.log_params(STATIC_PARS)
 
         # Training: prepare train data and start training the model asynchronously
         CldrFeats = exp["CldrFeats"] if "CldrFeats" in exp.keys() else True
         build_features_train_task = build_features.submit(
-            df_train, lags=3, split="train", CldrFeats=CldrFeats
+            df_train, lags=STATIC_PARS["lags"], split="train", CldrFeats=CldrFeats
         )
         df_train_feats, _features2scale = build_features_train_task.result()
         create_X_y_multistep_train_task = create_X_y_multistep.submit(
-            df_train_feats, steps=FORECAST_STEPS, target=TARGET, split="train"
+            df_train_feats, steps=STATIC_PARS["steps"], target=TARGET, split="train"
         )
         # Instantiate and train a model
         X_train, y_train = create_X_y_multistep_train_task.result()
@@ -156,11 +163,11 @@ def run_single_experiment(
 
         # Evaluate the model: prepare test data while the model is training
         build_features_test_task = build_features.submit(
-            df_test, lags=3, split="test", CldrFeats=CldrFeats
+            df_test, lags=STATIC_PARS["lags"], split="test", CldrFeats=CldrFeats
         )
         df_test_feats, _features2scale = build_features_test_task.result()
         create_X_y_multistep_test_task = create_X_y_multistep.submit(
-            df_test_feats, steps=FORECAST_STEPS, target=TARGET, split="test"
+            df_test_feats, steps=STATIC_PARS["steps"], target=TARGET, split="test"
         )
         X_test, y_test = create_X_y_multistep_test_task.result()
         estimator = create_fit_xgbregressor_chain_task.result()
@@ -178,7 +185,7 @@ def run_single_experiment(
         pip_reqs = get_pipreqs_from_pyproject(os.path.join(ROOTPATH, "pyproject.toml"))
         mlflow.sklearn.log_model(
             estimator,
-            name=ARTIFACT_PATH,
+            name=MODEL_NAME,
             pip_requirements=pip_reqs,
             input_example=X_train.head(5),
             signature=signature,
@@ -209,18 +216,21 @@ def register_best_model(only_latest: bool = True) -> None:
         max_results=2,
         order_by=["metrics.overall_test_rmse ASC"],
     )
-    model_name = "stocks_forecasting_regressor_candidates"
     best_run_id = runs[0].info.run_id
-    best_model_uri = f"runs:/{best_run_id}/{ARTIFACT_PATH}"
+    best_model_uri = f"runs:/{best_run_id}/{MODEL_NAME}"
     logger.info(f"Registering best model with id: {best_run_id}")
-    registered = mlflow.register_model(model_uri=best_model_uri, name=model_name)
+    registered = mlflow.register_model(
+        model_uri=best_model_uri, name=CANDIDATES_REGISTRY
+    )
     version = registered.version
     logger.info(f"Registered model has version={version}")
     logger.info("Aliasing model as champion")
-    CLIENT.set_registered_model_alias(model_name, alias="champion", version=version)
+    CLIENT.set_registered_model_alias(
+        CANDIDATES_REGISTRY, alias="champion", version=version
+    )
     logger.info("Tagging model as approved")
     CLIENT.set_model_version_tag(
-        model_name, version=version, key="validation_status", value="approved"
+        CANDIDATES_REGISTRY, version=version, key="validation_status", value="approved"
     )
 
 
