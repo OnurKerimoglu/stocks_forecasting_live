@@ -1,13 +1,14 @@
+import logging
 import os
 from datetime import datetime
 
 import kaggle
 import pandas as pd
-from prefect import get_run_logger, task
 from statsmodels.tsa.deterministic import CalendarFourier, DeterministicProcess
 
+logger = logging.getLogger(__name__)
 
-@task(task_run_name="load_raw_data", retries=2, retry_delay_seconds=5)
+
 def load_raw_data(datapath: str, user: str, datasetname: str) -> pd.DataFrame:
     """
     Loads raw data from a specified dataset using the Kaggle API.
@@ -30,7 +31,6 @@ def load_raw_data(datapath: str, user: str, datasetname: str) -> pd.DataFrame:
     pd.DataFrame
         A DataFrame containing the raw data from the dataset.
     """
-    logger = get_run_logger()
     logger.info(f"datapath: {datapath}")
 
     os.makedirs(datapath, exist_ok=True)
@@ -50,7 +50,6 @@ def load_raw_data(datapath: str, user: str, datasetname: str) -> pd.DataFrame:
     return df_raw
 
 
-@task(task_run_name="remove_raw_data")
 def remove_raw_data(datapath: str) -> None:
     """
     Removes the raw data from the specified path if it exists.
@@ -62,8 +61,6 @@ def remove_raw_data(datapath: str) -> None:
     Returns:
     None
     """
-    logger = get_run_logger()
-
     raw_data_fpath = os.path.join(datapath, "World-Stock-Prices-Dataset.csv")
     if os.path.exists(raw_data_fpath):
         logger.info(f"Removing the raw data @ {raw_data_fpath}")
@@ -72,7 +69,6 @@ def remove_raw_data(datapath: str) -> None:
         logger.info(f"Raw data not found @ {raw_data_fpath}")
 
 
-@task(task_run_name="clean_raw_data")
 def clean_raw_data(df_raw: pd.DataFrame) -> pd.DataFrame:
     """
     Cleans and processes raw stock price data.
@@ -91,7 +87,6 @@ def clean_raw_data(df_raw: pd.DataFrame) -> pd.DataFrame:
         where 'returns' represents the percentage change in 'Close' prices, winsorized
         to remove extreme outliers.
     """
-    logger = get_run_logger()
     df_clean = df_raw.copy()
     df_clean.drop_duplicates(subset=["Date", "Ticker"], keep="first", inplace=True)
     df_clean = df_clean[["Date", "Close", "Ticker"]]
@@ -108,7 +103,6 @@ def clean_raw_data(df_raw: pd.DataFrame) -> pd.DataFrame:
     return df_clean
 
 
-@task(task_run_name="sample_tickers_dates")
 def sample_tickers_dates(
     df_clean: pd.DataFrame,
     tickers: list | None = None,
@@ -139,7 +133,6 @@ def sample_tickers_dates(
     pd.DataFrame
         A new DataFrame with the sampled data, sorted by 'Ticker' and 'Date'.
     """
-    logger = get_run_logger()
     if tickers is None:
         df_clean_sample = df_clean.copy()
     else:
@@ -158,7 +151,6 @@ def sample_tickers_dates(
     return df_clean_sample
 
 
-@task(task_run_name="split_train_test_panel")
 def split_train_test_panel(
     df: pd.DataFrame, train_ratio: float, date_col: str = "Date"
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -198,7 +190,6 @@ def split_train_test_panel(
     return df_train, df_test
 
 
-@task(task_run_name="build_features_{split}")
 def build_features(
     df_in: pd.DataFrame, lags: int = 3, split: str | None = None, CldrFeats: bool = True
 ) -> tuple[pd.DataFrame, list[str]]:
@@ -223,7 +214,6 @@ def build_features(
     features2scale : List[str]
         List of feature names that should be scaled (e.g. by StandardScaler), depending on the model.
     """
-    logger = get_run_logger()
     feats = []
     if CldrFeats:
         logger.info("Calendar features will be included")
@@ -364,7 +354,6 @@ def make_multistep_target(y: pd.Series, steps: int) -> pd.DataFrame:
     return y_multi
 
 
-@task(task_run_name="create_X_y_multistep_{split}")
 def create_X_y_multistep(
     df_all: pd.DataFrame,
     steps: int = 5,
@@ -401,7 +390,6 @@ def create_X_y_multistep(
         A DataFrame with each column corresponding to a future step's target
         values. The index is a MultiIndex of Ticker and Date.
     """
-    logger = get_run_logger()
     y_list = []
     X_list = []
     # loop over tickers to create multistep targets

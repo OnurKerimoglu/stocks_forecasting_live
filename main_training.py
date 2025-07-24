@@ -54,16 +54,16 @@ def stocks_forecasting_training_flow(
     The main training workflow for the stocks forecasting project.
 
     This workflow is orchestrated by prefect and performs the following main and sub-steps:
-    1. Base data preparation (task group)
-      - Get the raw data (task)
-      - Clean the raw data  (task)
-      - Sample tickers and dates (task)
-      - Split train and test
-    2. Run experiments (task group)
-      - Prepare train features
-      - Start training the model asynchronously
-      - Prepare test data while the model is training
-      - Once the estimator and data are ready, evaluate the model
+    1. Base data preparation (task)
+        - Get the raw data
+        - Clean the raw data
+        - Sample tickers and dates
+        - Split train and test
+    2. Run experiments (task)
+        - Prepare features
+        - Train the model
+        - Evaluate the model
+        - Log the model, parameters, metrics to mlfow
     3. Register the best model (task)
     4. Cleanup (task)
 
@@ -141,46 +141,37 @@ def run_single_experiment(
     if mlflow.active_run() is not None:
         mlflow.end_run()
     with mlflow.start_run(run_name=run_name):
-        mlflow.set_tag("run_date", ISODATE)
-        mlflow.log_params(exp)
-        mlflow.log_params(STATIC_PARS)
-
-        # Training: prepare train data and start training the model asynchronously
+        # Training: prepare data
         CldrFeats = exp["CldrFeats"] if "CldrFeats" in exp.keys() else True
-        build_features_train_task = build_features.submit(
+        df_train_feats, _features2scale = build_features(
             df_train, lags=STATIC_PARS["lags"], split="train", CldrFeats=CldrFeats
         )
-        df_train_feats, _features2scale = build_features_train_task.result()
-        create_X_y_multistep_train_task = create_X_y_multistep.submit(
-            df_train_feats, steps=STATIC_PARS["steps"], target=TARGET, split="train"
-        )
-        # Instantiate and train a model
-        X_train, y_train = create_X_y_multistep_train_task.result()
-        Regularization = exp["ModReg"] if "ModReg" in exp.keys() else True
-        create_fit_xgbregressor_chain_task = create_fit_xgbregressor_chain.submit(
-            X_train, y_train, Regularization
-        )
-
-        # Evaluate the model: prepare test data while the model is training
-        build_features_test_task = build_features.submit(
+        df_test_feats, _features2scale = build_features(
             df_test, lags=STATIC_PARS["lags"], split="test", CldrFeats=CldrFeats
         )
-        df_test_feats, _features2scale = build_features_test_task.result()
-        create_X_y_multistep_test_task = create_X_y_multistep.submit(
+        X_train, y_train = create_X_y_multistep(
+            df_train_feats, steps=STATIC_PARS["steps"], target=TARGET, split="train"
+        )
+        X_test, y_test = create_X_y_multistep(
             df_test_feats, steps=STATIC_PARS["steps"], target=TARGET, split="test"
         )
-        X_test, y_test = create_X_y_multistep_test_task.result()
-        estimator = create_fit_xgbregressor_chain_task.result()
-        # Once the estimator and data are ready, evaluate the model
+        # Instantiate and train a model
+        Regularization = exp["ModReg"] if "ModReg" in exp.keys() else True
+        estimator = create_fit_xgbregressor_chain(X_train, y_train, Regularization)
+        # Evaluate the model
         scores = evaluate_all(
             estimator, X_train, y_train, X_test, y_test, df, SAMPLE_TICKERS
         )
         logger.info(scores)
-
+        # log the parameters
+        mlflow.set_tag("run_date", ISODATE)
+        mlflow.log_params(exp)
+        mlflow.log_params(STATIC_PARS)
+        # log the metrics
         for cat, score_dict in scores.items():
             for metric, value in score_dict.items():
                 mlflow.log_metrics({f"{cat}_{metric}": value})
-
+        # log the model
         signature = infer_signature(X_train, estimator.predict(X_train))
         pip_reqs = get_pipreqs_from_pyproject(os.path.join(ROOTPATH, "pyproject.toml"))
         mlflow.sklearn.log_model(
@@ -190,8 +181,6 @@ def run_single_experiment(
             input_example=X_train.head(5),
             signature=signature,
         )
-
-        return
 
 
 @task(task_run_name="register_best_model")

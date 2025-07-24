@@ -3,9 +3,19 @@
 ## Training Pipeline
 
 ### Workflow Orchestration
-Training workflow (provided by the [main_training.py](../main_training.py) )  will first prepare the features for model training and start fitting the model as soon as the training data is ready. Preparation of the test data will start only after initiation of model training (which is the most time consuming task), and will run in parallel, as demonstrated here for a single run:
-<img src="images/training_pipeline_prefect.png" width="800"/>
-<br/><br/>
+Training workflow (provided by the [main_training.py](../main_training.py)) have 4 main steps:
+1. Base data preparation (task)
+    - Get the raw data
+    - Clean the raw data
+    - Sample tickers and dates
+    - Split train and test
+2. Run experiments (task)
+    - Prepare features
+    - Train the model
+    - Evaluate the model
+    - Log the model, parameters, metrics to mlfow
+3. Register the best model (task)
+4. Cleanup (task)
 
 ### Experiment Tracking and Model Registry
 Experiments will be conducted according to the configuration files in the `config`  directory under the project root. Here, the factors and their levels to be experimented with are provided as a yaml file, which will be read by [create_experiments.py](../src/create_experiments.py), and converted to an experiment dictionary following a full factorial design. For example, config file [Exp_CldrFeats_ModReg.yaml](../config/Exp_CldrFeats_ModReg.yaml):

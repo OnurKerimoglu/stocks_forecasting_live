@@ -1,11 +1,13 @@
+import logging
+
 import pandas as pd
-from prefect import get_run_logger, task
 from sklearn.metrics import root_mean_squared_error
 from sklearn.multioutput import RegressorChain
 from xgboost import XGBRegressor
 
+logger = logging.getLogger(__name__)
 
-@task(task_run_name="create_fit_xgbregressor_chain")
+
 def create_fit_xgbregressor_chain(
     X_train: pd.DataFrame, y_train: pd.DataFrame, Regularization: bool = True
 ) -> RegressorChain:
@@ -28,7 +30,6 @@ def create_fit_xgbregressor_chain(
     RegressorChain
         A fitted RegressorChain model using the XGBoost regressor as the base estimator.
     """
-    logger = get_run_logger()
     if Regularization:
         logger.info("Instantiating a regularized XGBoost regressor")
         xgb = XGBRegressor(
@@ -62,7 +63,6 @@ def create_fit_xgbregressor_chain(
     return estimator
 
 
-@task(task_run_name="evaluate_all")
 def evaluate_all(
     estimator: RegressorChain,  # add other estimators as needed
     X_train: pd.DataFrame,
@@ -99,7 +99,6 @@ def evaluate_all(
         where each key has a dictionary with the keys 'train_rmse' and 'test_rmse'
         containing the respective root mean squared error.
     """
-    logger = get_run_logger()
     y_train_hat = estimator.predict(X_train)
     y_test_hat = estimator.predict(X_test)
     # index for visualisation

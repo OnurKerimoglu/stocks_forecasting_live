@@ -1,5 +1,6 @@
 import datetime
 import json
+import logging
 import os
 import pickle
 
@@ -9,7 +10,6 @@ import pandas as pd
 import yfinance as yf
 from flask import Flask, jsonify, request
 from mlflow.tracking import MlflowClient
-from prefect import flow, get_run_logger, task
 from xgboost import XGBRegressor
 
 from data import (
@@ -28,12 +28,12 @@ MODEL_ALIAS = "champion"
 rootpath = os.path.dirname(__file__)
 DEPLOYPATH = os.path.join(rootpath, "deployment")
 
+logger = logging.getLogger(__name__)
 
-@flow(name="stocks_forecasting_inference_flow")
+
 def stocks_forecasting_inference_flow(
     ticker: str = "AAPL", use_model_registry: bool = False
 ) -> None:
-    logger = get_run_logger()
     if use_model_registry:
         model, params = retrieve_registered_model()
     else:
@@ -44,9 +44,7 @@ def stocks_forecasting_inference_flow(
     return last_day, forecast
 
 
-@task(task_run_name="retrieve_registered_model")
 def retrieve_registered_model() -> tuple:
-    logger = get_run_logger()
     # Load the model from the Model Registry
     model_uri = f"models:/{REGISTRY_NAME}@{MODEL_ALIAS}"
     logger.info(f"Retrieveing model_uri: {model_uri}")
@@ -59,7 +57,6 @@ def retrieve_registered_model() -> tuple:
 
 
 def retrieve_locally_stored_model() -> tuple:
-    logger = get_run_logger()
     fpath = os.path.join(DEPLOYPATH, "model.pkl")
     logger.info(f"Loading model from: {fpath}")
     with open(fpath, "rb") as f:
@@ -71,7 +68,6 @@ def retrieve_locally_stored_model() -> tuple:
     return model, params
 
 
-@task(task_run_name="retrieve_ticker_data")
 def retrieve_ticker_data(ticker: str) -> pd.DataFrame:
     # download the raw data
     df_raw = fetch_ticker_data_from_yf(ticker=ticker)
@@ -81,9 +77,7 @@ def retrieve_ticker_data(ticker: str) -> pd.DataFrame:
     return df
 
 
-@task(task_run_name="fetch_ticker_data_from_yf", retries=2, retry_delay_seconds=1)
 def fetch_ticker_data_from_yf(ticker: str) -> pd.DataFrame:
-    logger = get_run_logger()
     period_start = datetime.datetime.now() - datetime.timedelta(days=100)
     logger.info(f"Fetching price data for {ticker}")
     try:
@@ -112,7 +106,6 @@ def fetch_ticker_data_from_yf(ticker: str) -> pd.DataFrame:
     return df
 
 
-@task(task_run_name="run_forecast")
 def run_forecast(
     model: XGBRegressor,
     parameters: dict,
