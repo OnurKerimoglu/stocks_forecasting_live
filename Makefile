@@ -17,4 +17,4 @@ prefect_deploy_train:
 	prefect worker start --pool "stocks_forecasting_live_local"
 
 mlflow_serve:
-	mlflow server --backend-store-uri sqlite:///mlflow.db --default-artifact-root ./artifacts
+	mlflow server --backend-store-uri sqlite:///mlflow.db --host 127.0.0.1 --port 5000 --default-artifact-root ./artifacts

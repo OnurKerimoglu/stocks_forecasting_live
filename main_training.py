@@ -31,7 +31,7 @@ CONFPATH = os.path.join(ROOTPATH, "config")
 ISODATE = datetime.date.today().isoformat()
 
 # Set up mlflow
-mlflow.set_tracking_uri("sqlite:///mlflow.db")
+mlflow.set_tracking_uri("http://127.0.0.1:5000")
 ARTIFACT_PATH = "mlflow_models"
 CLIENT = MlflowClient()
 EXPS, EXP_NAME = build_exp_dicts(os.path.join(CONFPATH, "Exp_CldrFeats_ModReg.yaml"))
