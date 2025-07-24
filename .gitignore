@@ -214,4 +214,6 @@ data/
 mlflow.db
 artifacts/
 
+deployment/
+
 sandbox/
