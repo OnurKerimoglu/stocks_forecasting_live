@@ -37,8 +37,8 @@ STATIC_PARS = {
 
 # Set up mlflow
 mlflow.set_tracking_uri("http://127.0.0.1:5000")
-MODEL_NAME = "mlflow_models"
-CANDIDATES_REGISTRY = "stocks_forecasting_candidates"
+MODEL_ARTIFACT_FOLDER = "mlflow_models"
+REGISTRY_NAME = "stocks_forecasting_candidates"
 CLIENT = MlflowClient()
 EXPS, EXP_NAME = build_exp_dicts(os.path.join(CONFPATH, "Exp_CldrFeats_ModReg.yaml"))
 mlflow.set_experiment(EXP_NAME)
@@ -185,7 +185,7 @@ def run_single_experiment(
         pip_reqs = get_pipreqs_from_pyproject(os.path.join(ROOTPATH, "pyproject.toml"))
         mlflow.sklearn.log_model(
             estimator,
-            name=MODEL_NAME,
+            name=MODEL_ARTIFACT_FOLDER,
             pip_requirements=pip_reqs,
             input_example=X_train.head(5),
             signature=signature,
@@ -217,20 +217,16 @@ def register_best_model(only_latest: bool = True) -> None:
         order_by=["metrics.overall_test_rmse ASC"],
     )
     best_run_id = runs[0].info.run_id
-    best_model_uri = f"runs:/{best_run_id}/{MODEL_NAME}"
+    best_model_uri = f"runs:/{best_run_id}/{MODEL_ARTIFACT_FOLDER}"
     logger.info(f"Registering best model with id: {best_run_id}")
-    registered = mlflow.register_model(
-        model_uri=best_model_uri, name=CANDIDATES_REGISTRY
-    )
+    registered = mlflow.register_model(model_uri=best_model_uri, name=REGISTRY_NAME)
     version = registered.version
     logger.info(f"Registered model has version={version}")
     logger.info("Aliasing model as champion")
-    CLIENT.set_registered_model_alias(
-        CANDIDATES_REGISTRY, alias="champion", version=version
-    )
+    CLIENT.set_registered_model_alias(REGISTRY_NAME, alias="champion", version=version)
     logger.info("Tagging model as approved")
     CLIENT.set_model_version_tag(
-        CANDIDATES_REGISTRY, version=version, key="validation_status", value="approved"
+        REGISTRY_NAME, version=version, key="validation_status", value="approved"
     )
 
 
