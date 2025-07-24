@@ -2,7 +2,6 @@ import logging
 import os
 from datetime import datetime
 
-import kaggle
 import pandas as pd
 from statsmodels.tsa.deterministic import CalendarFourier, DeterministicProcess
 
@@ -31,6 +30,8 @@ def load_raw_data(datapath: str, user: str, datasetname: str) -> pd.DataFrame:
     pd.DataFrame
         A DataFrame containing the raw data from the dataset.
     """
+    import kaggle
+
     logger.info(f"datapath: {datapath}")
 
     os.makedirs(datapath, exist_ok=True)
