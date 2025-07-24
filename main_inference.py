@@ -183,6 +183,6 @@ def predict_endpoint() -> dict:
     return jsonify(result)
 
 
-if __name__ == "__main__":
-    # stocks_forecasting_inference_flow(ticker="AAPL", use_model_registry=False)
-    app.run(debug=True, host="0.0.0.0", port=9696)
+# if __name__ == "__main__":
+# stocks_forecasting_inference_flow(ticker="AAPL", use_model_registry=False)
+# app.run(debug=True, host="0.0.0.0", port=9696)
