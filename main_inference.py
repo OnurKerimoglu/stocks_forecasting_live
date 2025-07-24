@@ -1,4 +1,7 @@
 import datetime
+import json
+import os
+import pickle
 
 import mlflow
 import numpy as np
@@ -17,14 +20,23 @@ from data import (
 # Global parameters
 mlflow.set_tracking_uri("http://127.0.0.1:5000")
 CLIENT = MlflowClient()
+MODEL_ARTIFACT_FOLDER = "mlflow_models"
 REGISTRY_NAME = "stocks_forecasting_candidates"  # The registry from which the models should be pulled from
 MODEL_ALIAS = "champion"
 
+rootpath = os.path.dirname(__file__)
+DEPLOYPATH = os.path.join(rootpath, "deployment")
+
 
 @flow(name="stocks_forecasting_inference_flow")
-def stocks_forecasting_inference_flow(ticker: str = "AAPL") -> None:
+def stocks_forecasting_inference_flow(
+    ticker: str = "AAPL", use_model_registry: bool = False
+) -> None:
     logger = get_run_logger()
-    model, params = retrieve_registered_model()
+    if use_model_registry:
+        model, params = retrieve_registered_model()
+    else:
+        model, params = retrieve_locally_stored_model()
     df_init = retrieve_ticker_data(ticker)
     last_day, forecast = run_forecast(model, params, df_init)
     logger.info(f"\nlast day:\n{last_day}\nforecast:\n{forecast}")
@@ -41,6 +53,19 @@ def retrieve_registered_model() -> tuple:
     mv = CLIENT.get_model_version_by_alias(name=REGISTRY_NAME, alias=MODEL_ALIAS)
     run = CLIENT.get_run(mv.run_id)
     params = run.data.params
+    return model, params
+
+
+def retrieve_locally_stored_model() -> tuple:
+    logger = get_run_logger()
+    fpath = os.path.join(DEPLOYPATH, "model.pkl")
+    logger.info(f"Loading model from: {fpath}")
+    with open(fpath, "rb") as f:
+        model = pickle.load(f)
+    fpath = os.path.join(DEPLOYPATH, "params.json")
+    logger.info(f"Loading params from: {fpath}")
+    with open(fpath) as f:
+        params = json.load(f)
     return model, params
 
 
@@ -140,4 +165,4 @@ def run_forecast(
 
 
 if __name__ == "__main__":
-    stocks_forecasting_inference_flow(ticker="AAPL")
+    stocks_forecasting_inference_flow(ticker="AAPL", use_model_registry=False)
