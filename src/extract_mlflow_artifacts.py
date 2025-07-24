@@ -1,11 +1,9 @@
 import datetime
 import json
 import os
-import pickle
 
 import mlflow
 from mlflow.tracking import MlflowClient
-from xgboost import XGBRegressor
 
 # Global parameters
 mlflow.set_tracking_uri("http://127.0.0.1:5000")
@@ -19,25 +17,22 @@ DEPLOYPATH = os.path.join(rootpath, "deployment")
 
 
 def main_extract_model() -> None:
-    model, params, run_id = retrieve_registered_model()
-    store_model_artifacts(model, params, run_id)
+    run_id, params = retrieve_registered_model()
+    store_model_artifacts(run_id, params)
     print("model parameters are extracted into: ", DEPLOYPATH)
 
 
 def retrieve_registered_model() -> tuple:
-    # Load the model from the Model Registry
-    model_uri = f"models:/{REGISTRY_NAME}@{MODEL_ALIAS}"
-    print(f"Retrieveing model_uri: {model_uri}")
-    model = mlflow.sklearn.load_model(model_uri)
-    # Get the parameters
+    # Find the run_id, and extract the parameters
     mv = CLIENT.get_model_version_by_alias(name=REGISTRY_NAME, alias=MODEL_ALIAS)
-    run = CLIENT.get_run(mv.run_id)
+    run_id = mv.run_id
+    run = CLIENT.get_run(run_id)
     params = run.data.params
-    # artifacts = CLIENT.list_artifacts(mv.run_id, path=MODEL_ARTIFACT_FOLDER)
-    return model, params, mv.run_id
+    # artifacts = CLIENT.list_artifacts(run_id, path=MODEL_ARTIFACT_FOLDER)
+    return run_id, params
 
 
-def store_model_artifacts(model: XGBRegressor, params: dict, run_id: str) -> None:
+def store_model_artifacts(run_id: str, params: dict) -> None:
     # clean deployments_folder
     if os.path.exists(DEPLOYPATH):
         for f in os.listdir(DEPLOYPATH):
@@ -48,32 +43,32 @@ def store_model_artifacts(model: XGBRegressor, params: dict, run_id: str) -> Non
                 os.rmdir(f)
     else:
         os.makedirs(DEPLOYPATH)
-    # store model as pkl
-    model_fpath = os.path.join(DEPLOYPATH, "model.pkl")
-    with open(model_fpath, "wb") as f:
-        pickle.dump(model, f)
-    print("model is stored in: ", model_fpath)
     # store params as json
     params_fpath = os.path.join(DEPLOYPATH, "params.json")
     with open(params_fpath, "w") as f:
         json.dump(params, f)
     print("params are stored in: ", params_fpath)
-    # store requirements.txt
-    artifact_uri = f"runs:/{run_id}/{MODEL_ARTIFACT_FOLDER}/requirements.txt"
-    print(f"Downloading requirements from: {artifact_uri}")
+
+    # store requirements.txt and model.pkl
+    artifact_uri = f"runs:/{run_id}/{MODEL_ARTIFACT_FOLDER}"
+    print(f"Downloading model and requirements from: {artifact_uri}")
     reqs_path_original = mlflow.artifacts.download_artifacts(
-        artifact_uri=artifact_uri, dst_path=DEPLOYPATH
+        artifact_uri=f"{artifact_uri}/requirements.txt", dst_path=DEPLOYPATH
+    )
+    model_path_original = mlflow.artifacts.download_artifacts(
+        artifact_uri=f"{artifact_uri}/model.pkl", dst_path=DEPLOYPATH
     )
     reqs_path = os.path.join(DEPLOYPATH, "requirements.txt")
-    # move the requirements.txt to the deployments folder
-    os.rename(reqs_path_original, reqs_path)
+    # move the requirements.txt and model.pkl to the deployments folder
+    os.rename(reqs_path_original, os.path.join(DEPLOYPATH, "requirements.txt"))
+    os.rename(model_path_original, os.path.join(DEPLOYPATH, "model.pkl"))
     os.rmdir(os.path.join(DEPLOYPATH, MODEL_ARTIFACT_FOLDER))
-    print("requirements are stored in: ", reqs_path)
+    print("requirements.txt and model.pkl are stored in: ", reqs_path)
+
     # log date
     date_fpath = os.path.join(DEPLOYPATH, "extraction_date.txt")
     with open(date_fpath, "w") as f:
         f.write(datetime.datetime.now().isoformat())
-    return DEPLOYPATH
 
 
 if __name__ == "__main__":
