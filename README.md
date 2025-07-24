@@ -21,7 +21,7 @@ Notes:
 - [ruff](https://docs.astral.sh/ruff/) is used as linter and formatter. Issue `make quality_checks` to run the tests manually.
 - [pre-commit](https://pre-commit.com/) hooks will be enabled by the last command above. Only the default hooks, private key detection and linting/formatting hooks are specified (see the [config](.pre-commit-config.yaml))
 
-### Running the Training Pipeline
+### Training Pipeline
 
 #### Initiating the Orchestrator
 is handled by [prefect](https://www.prefect.io/) (will be installed as a dependency). The workflow deployment comprise the following steps:
@@ -40,3 +40,30 @@ If the deploy_training_workflow.py is not changed before deployment, the workflo
   - test_mode (default: True): raw_data will not be removed after execution
   - use_sample_tickers_for_training (default: True): Only two tickers (['AMZN', 'APPL']) will be used to train the model (these two tickers will be used for the model evaluation anyway, independent of the selection here)
   - select_only_latest (default: True): if True, the best model run will be selected only among runs from the current date, i.e., ignoring the previous runs
+
+### Inference Pipeline
+
+#### Deployment
+Deployment of the inference pipeline is a two-step process:
+1. Model extraction from mlflow: issue `make extract_registered_model`, only after making sure that the mlflow server is running (if not `make mlflow_serve`). This will query mlflow and get the run_id of the model registered with alias 'champion' (i.e., last version), and copy the `model.pkl` and `requirements.txt` artifacts as well as the parameters as `params.json` into a `deployment` folder under project root (after removing its previous contents).
+2. Building the container image:  issue `make inference_build`. This will pack all necessary files and install packages needed for serving the inference pipeline.
+
+#### Testing
+To test the inference pipeline and try some forecasts:
+1. Start serving the flask app: issue `make inference_serve`. This will start the flask app at `http://0.0.0.0:9696`
+2. Run some tests: once the inference is serving, issue `make inference_test` to run a test. The expected output is:
+```
+=== LAST DAY ===
+             close returns (%)
+index
+2025-07-24  194.69       1.66%
+
+=== FORECAST ===
+             close returns (%)
+index
+2025-07-25  195.61       0.47%
+2025-07-28  195.55      -0.03%
+2025-07-29  194.63      -0.48%
+2025-07-30  195.33       0.36%
+2025-07-31  193.93      -0.72%
+```
