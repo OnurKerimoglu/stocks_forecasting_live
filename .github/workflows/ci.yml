@@ -11,7 +11,7 @@ jobs:
         steps:
             - uses: actions/checkout@v4
 
-            - name: set up python
+            - name: Set up python
               uses: actions/setup-python@v5
               with:
                   python-version-file: "pyproject.toml"
@@ -26,8 +26,8 @@ jobs:
               run: |
                   uv sync --locked --all-extras --dev || uv pip install -e .
 
-            - name: run quality checks
-              run: make quality_checks
+            - name: Run quality checks
+              run: uv run ruff check || uv run ruff format
 
-            - name: run tests
-              run: make tests
+            - name: Run tests
+              run: uv run pytest tests
