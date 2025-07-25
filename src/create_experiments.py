@@ -33,7 +33,7 @@ def generate_factorial_combinations(factor_levels: dict) -> list:
 
 
 if __name__ == "__main__":
-    rootpath = "/home/onur/WORK/DS/repos/stocks_forecasting_live/"
+    rootpath = os.path.dirname(os.path.dirname(__file__))
     fpath = os.path.join(rootpath, "config", "Exp_CldrFeats_ModReg.yaml")
     configs = build_exp_dicts(fpath)
     for cfg in configs:
