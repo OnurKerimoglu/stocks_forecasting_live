@@ -13,6 +13,9 @@ provider "google" {
   region      = var.region
 }
 
+################################################################################
+# Enable and provision GAR
+################################################################################
 resource "google_project_service" "artifact_registry" {
   project = var.project
   service = "artifactregistry.googleapis.com"
@@ -31,4 +34,15 @@ resource "google_artifact_registry_repository" "forecasting_repo" {
   docker_config {
     immutable_tags = false
   }
+}
+
+################################################################################
+# Enable Cloud Run
+################################################################################
+resource "google_project_service" "run" {
+  project = var.project
+  service = "run.googleapis.com"
+
+  # Keep the API on even after destroy
+  disable_on_destroy = false
 }
