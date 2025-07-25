@@ -60,3 +60,14 @@ inference_deploy: inference_publish
 	  --service-account=$(SERVICE_ACCOUNT) \
 	  --allow-unauthenticated \
 	  --port=9696
+
+inference_test_deployment:
+	@echo "Testing Cloud Run service"
+	@SERVICE_URL="$$(gcloud run services describe $(SERVICE_NAME) \
+	  --project=$(PROJECT_ID) \
+	  --region=$(REGION) \
+	  --format='value(status.url)')" && \
+	echo "Service URL of the deployment is: $$SERVICE_URL" && \
+	curl -X POST "$$SERVICE_URL/forecast" \
+	  -H "Content-Type: application/json" \
+	  -d '{"ticker":"GOOG"}'
