@@ -18,7 +18,8 @@ pre-commit install                          # Enable pre-commit hooks
 ```
 Notes:
 - A [Makefile](Makefile) automates/facilitates certain operations, as will be referred below.
-- [ruff](https://docs.astral.sh/ruff/) is used as linter and formatter. Issue `make quality_checks` to run the tests manually.
+- [ruff](https://docs.astral.sh/ruff/) is used as linter and formatter. Issue `make quality_checks` to run the quality checks manually.
+- [pytest](https://docs.pytest.org) is used as the testing framework. Issue `make tests` to run the (so far only unit) tests manually.
 - [pre-commit](https://pre-commit.com/) hooks will be enabled by the last command above. Only the default hooks, private key detection and linting/formatting hooks are specified (see the [config](.pre-commit-config.yaml))
 
 ### Cloud Infrastructure
@@ -62,7 +63,7 @@ If the deploy_training_workflow.py is not changed before deployment, the workflo
 #### Local Build
 Deployment of the inference pipeline is a two-step process:
 1. Model extraction from mlflow: issue `make extract_registered_model`, only after making sure that the mlflow server is running (if not `make mlflow_serve`). This will query mlflow and get the run_id of the model registered with alias 'champion' (i.e., last version), and copy the `model.pkl` and `requirements.txt` artifacts as well as the parameters as `params.json` into a `deployment` folder under project root (after removing its previous contents).
-2. Building the container image:  issue `make inference_build_local`. This will pack all necessary files and install packages needed for serving the inference pipeline.
+2. Building the container image:  issue `make inference_build_local`. After triggering the `quality_checks` and `tests` targets (see [initial setup](#prerequisites-and-initial-setup)) to catch any obvious flaws, this will pack all necessary files and install packages needed for serving the inference pipeline.
 
 #### Local Testing
 To test the inference pipeline and try some forecasts:

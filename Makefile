@@ -18,6 +18,10 @@ quality_checks:
 	ruff check
 	ruff format
 
+.PHONY: tests
+tests:
+	pytest tests/
+
 prefect_serve:
 	prefect server start
 
@@ -34,7 +38,7 @@ mlflow_serve:
 extract_registered_model:
 	python src/extract_mlflow_artifacts.py
 
-inference_build_local:
+inference_build_local: quality_checks tests
 	docker build -f Docker/Dockerfile -t ${IMAGE_URI} .
 
 inference_serve_local:
