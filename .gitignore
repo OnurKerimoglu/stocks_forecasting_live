@@ -222,3 +222,7 @@ terraform/*.tfstate*
 terraform/.terraform*
 terraform/plan_*
 terraform/terraform.tfvars
+
+.vscode/
+
+tmp/
