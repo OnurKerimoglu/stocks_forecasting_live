@@ -21,6 +21,22 @@ Notes:
 - [ruff](https://docs.astral.sh/ruff/) is used as linter and formatter. Issue `make quality_checks` to run the tests manually.
 - [pre-commit](https://pre-commit.com/) hooks will be enabled by the last command above. Only the default hooks, private key detection and linting/formatting hooks are specified (see the [config](.pre-commit-config.yaml))
 
+### Cloud Infrastructure
+
+This project uses certain GCP services for deployment, managed by [Hashicorp Terraform](https://developer.hashicorp.com/terraform) (see: [terraform/main.tf](terraform/main.tf)). For being able to reproduce the steps that depend on cloud resources:
+- Create a project on GCP
+- Create a service account with the following roles:
+  - Artifact Registry Administrator
+  - Cloud Functions Admin
+  - Service Account User
+  - Service Usage Admin
+- Create a key for the service account
+- Create a file named 'terraform.tfvars' in the terraform directory that contains the path to your service account key
+- In the terraform directory:
+  - `terraform init`: to initilize the backend and provider (google) plugins
+  - `terraform apply`, and when prompted confirm: to generate the resources
+
+
 ### Training Pipeline
 
 #### Initiating the Orchestrator
