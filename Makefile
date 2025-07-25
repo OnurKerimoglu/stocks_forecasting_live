@@ -5,6 +5,8 @@ REGION       ?= europe-west1
 REPO         ?= stocks-forecasting-repo
 IMAGE_NAME   ?= stocks_forecasting_inference
 VERSION      ?= latest
+SERVICE_NAME ?= stocks-forecasting-service
+SERVICE_ACCOUNT ?= stocks-forecasting-mle@$(PROJECT_ID).iam.gserviceaccount.com
 
 IMAGE_URI:=${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${IMAGE_NAME}:${VERSION}
 
@@ -41,9 +43,20 @@ inference_serve_local:
 inference_test_local:
 	python scripts/test_inference.py --ticker GOOG
 
-inference_publish: inference_build
+inference_publish: inference_build_local
 	@echo "Configuring Docker to auth with GAR"
 	gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
 	@echo "Pushing Docker image to GAR"
 	docker push $(IMAGE_URI)
 	@echo "Image published: $(IMAGE_URI)"
+
+inference_deploy: inference_publish
+	@echo "Deploying $(SERVICE_NAME) to Cloud Run"
+	gcloud run deploy $(SERVICE_NAME) \
+	  --image=$(IMAGE_URI) \
+	  --region=$(REGION) \
+	  --platform=managed \
+	  --project=$(PROJECT_ID) \
+	  --service-account=$(SERVICE_ACCOUNT) \
+	  --allow-unauthenticated \
+	  --port=9696
