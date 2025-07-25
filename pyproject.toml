@@ -21,6 +21,11 @@ dependencies = [
     "yfinance>=0.2.65",
 ]
 
+[dependency-groups]
+dev = [
+    "pytest>=8.4.1",
+]
+
 [tool.uv]
 
 [tool.ruff]
