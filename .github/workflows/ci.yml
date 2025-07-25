@@ -1,0 +1,33 @@
+name: CI Tests
+on:
+    push:
+        branches: [ dev ]
+    pull_request:
+        branches: [ dev ]
+
+jobs:
+    quality_checks_tests:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            - name: set up python
+              uses: actions/setup-python@v4
+              with:
+                  python-version: ".python-version"
+
+            - name: Install uv
+              uses: astral-sh/setup-uv@v6
+              with:
+                version: "0.8.3"
+                enable-cache: true
+
+            - name: Install dependencies
+              run: |
+                  uv sync --locked --all-extras --dev || uv pip install -e .
+
+            - name: run quality checks
+              run: make quality_checks
+
+            - name: run tests
+              run: make tests
