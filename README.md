@@ -59,7 +59,7 @@ If the deploy_training_workflow.py is not changed before deployment, the workflo
 
 ### Inference Pipeline
 
-#### Local Deployment
+#### Local Build
 Deployment of the inference pipeline is a two-step process:
 1. Model extraction from mlflow: issue `make extract_registered_model`, only after making sure that the mlflow server is running (if not `make mlflow_serve`). This will query mlflow and get the run_id of the model registered with alias 'champion' (i.e., last version), and copy the `model.pkl` and `requirements.txt` artifacts as well as the parameters as `params.json` into a `deployment` folder under project root (after removing its previous contents).
 2. Building the container image:  issue `make inference_build_local`. This will pack all necessary files and install packages needed for serving the inference pipeline.
@@ -67,7 +67,7 @@ Deployment of the inference pipeline is a two-step process:
 #### Local Testing
 To test the inference pipeline and try some forecasts:
 1. Start serving the flask app: issue `make inference_serve_local`. This will start the flask app at `http://0.0.0.0:9696`
-2. Run some tests: once the inference is serving, issue `make inference_test_local` to run a test. The expected output is:
+2. Run some tests: once the inference is serving, issue `make inference_test_local` to run a test. This will call a [python script](scripts/test_inference.py) (with a ticker symbol as argument), which will in turn send a post request to localhost:9696/forecast, parse the output and -if everything worked- return something like:
 ```
 === LAST DAY ===
              close returns (%)
@@ -84,4 +84,12 @@ index
 2025-07-31  193.93      -0.72%
 ```
 
-#### Publishing in Google Artifact Registry
+#### Deploying the image to Cloud Run and Testing
+Assuming that the [Cloud Infrastructure](#cloud-infrastructure) instructions have been successfully executed, three steps are needed for deployment:
+1. Build the image locally (see above)
+2. Publish the image to [Google Artifact Registery](https://cloud.google.com/artifact-registry/docs) (GAR): issue `make inference_publish`
+3. Deploy the image in GAR to [Cloud Run](https://cloud.google.com/run?hl=en): issue `make inference_deploy`
+
+Note that, as the second step is a dependency of the third, and the first is a depednency of first, issuing directly the third will suffice.
+
+Once the deployment is done, a Service URL will be displayed. Note that this is a revision-specific URL that will change with every deployment. `cloud run services describe` with the correct parameters can provide the stable URL. the Makefile target `inference_test_deployment` makes use of this function and constructs a curl command for a default ticker to test the deployment.
