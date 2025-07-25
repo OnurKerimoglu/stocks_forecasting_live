@@ -1,3 +1,5 @@
+[![CI Tests](https://github.com/OnurKerimoglu/stocks_forecasting_live/actions/workflows/ci.yml/badge.svg)](https://github.com/OnurKerimoglu/stocks_forecasting_live/actions/workflows/ci.yml)
+
 # Stocks Forecasting
 
 ## Motivation and Objectives
