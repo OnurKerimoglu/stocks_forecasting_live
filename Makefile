@@ -1,3 +1,13 @@
+# GCP settings
+# should match with terraform/variables.tf and main.tf
+PROJECT_ID   ?= stocks-forecasting-466906
+REGION       ?= europe-west1
+REPO         ?= stocks-forecasting-repo
+IMAGE_NAME   ?= stocks_forecasting_inference
+VERSION      ?= latest
+
+IMAGE_URI:=${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${IMAGE_NAME}:${VERSION}
+
 # Set default arguments
 train_deployment_mode ?= dev
 
@@ -22,11 +32,18 @@ mlflow_serve:
 extract_registered_model:
 	python src/extract_mlflow_artifacts.py
 
-inference_build:
-	docker build -f Docker/Dockerfile -t stocks_forecasting_inference:v1 .
+inference_build_local:
+	docker build -f Docker/Dockerfile -t ${IMAGE_URI} .
 
-inference_serve:
-	docker run -it --rm -p 9696:9696 stocks_forecasting_inference:v1
+inference_serve_local:
+	docker run -it --rm -p 9696:9696 ${IMAGE_URI}
 
-inference_test:
+inference_test_local:
 	python scripts/test_inference.py --ticker GOOG
+
+inference_publish: inference_build
+	@echo "Configuring Docker to auth with GAR"
+	gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
+	@echo "Pushing Docker image to GAR"
+	docker push $(IMAGE_URI)
+	@echo "Image published: $(IMAGE_URI)"
