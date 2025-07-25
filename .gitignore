@@ -217,3 +217,8 @@ artifacts/
 deployment/
 
 sandbox/
+
+terraform/*.tfstate*
+terraform/.terraform*
+terraform/plan_*
+terraform/terraform.tfvars
