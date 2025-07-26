@@ -214,6 +214,7 @@ data/
 mlflow.db
 artifacts/
 
+extracted_model/
 deployment/
 
 sandbox/
