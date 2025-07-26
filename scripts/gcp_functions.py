@@ -1,0 +1,109 @@
+import os
+
+from google.cloud import storage
+
+
+def clear_gcs_folder(project_id: str, bucket_name: str, folder: str) -> None:
+    """
+    Deletes all objects in a GCS bucket under the specified folder.
+    Parameters:
+        project_id (str): The GCP project ID.
+        bucket_name (str): The name of the GCS bucket.
+        folder (str): folder (prefix) to clear.
+    """
+    client = storage.Client(project=project_id)
+    bucket = client.bucket(bucket_name)
+    blobs = list(bucket.list_blobs(prefix=folder))
+    if blobs:
+        print(
+            f"Clearing {len(blobs)} existing object(s) under gs://{bucket.name}/{folder}"
+        )
+        bucket.delete_blobs(blobs)
+        print(f"Successfully cleared gs://{bucket.name}/{folder}")
+
+
+def upload_directory(
+    project_id: str, bucket_name: str, folder: str, local_dir: str
+) -> None:
+    """
+    Uploads all files from a local directory to a GCS bucket under the specified prefix.
+
+    Parameters:
+        project_id (str): The GCP project ID
+        bucket_name (str): The name of the GCS bucket
+        folder (str): GCS target folder (prefix, relative to the bucket)
+        local_dir (str): Local directory to upload
+        bucket (storage.Bucket): Target GCS bucket
+    """
+    client = storage.Client(project=project_id)
+    bucket = client.bucket(bucket_name)
+    for root, _, files in os.walk(local_dir):
+        for file in files:
+            local_path = os.path.join(root, file)
+            rel_path = os.path.relpath(local_path, local_dir)
+            blob_path = os.path.join(folder, rel_path).replace("\\", "/")
+
+            blob = bucket.blob(blob_path)
+            blob.upload_from_filename(local_path)
+            print(f"Uploaded {local_path} to gs://{bucket.name}/{blob_path}")
+
+    print(f"Successfully uploaded {len(files)} file(s) to gs://{bucket.name}/{folder}")
+
+
+def download_directory(
+    project_id: str,
+    bucket_name: str,
+    folder: str,
+    local_dir: str,
+    refresh: bool = False,
+) -> None:
+    """
+    Downloads all files under a GCS 'folder' (prefix) to a local directory.
+
+    Parameters:
+        project (str, optional): GCP project ID (optional if inferred from credentials).
+        bucket_name (str): Name of the GCS bucket.
+        gcs_prefix (str): The prefix (folder path) in GCS to download from.
+        local_dir (str): Local directory where files should be saved.
+    """
+    # Ensure local output directory exists
+    # clean the local folder
+    if os.path.exists(local_dir):
+        if refresh:
+            print(f"Clearing {local_dir}")
+            for f in os.listdir(local_dir):
+                try:
+                    os.remove(os.path.join(local_dir, f))
+                except Exception as e:
+                    print(e)
+                    os.rmdir(f)
+        else:
+            print("Specified directory exists and refresh is set to False. Exiting.")
+            return
+    else:
+        os.makedirs(local_dir)
+
+    # Initialize client
+    client = storage.Client(project=project_id)
+    bucket = client.bucket(bucket_name)
+
+    blobs = list(bucket.list_blobs(prefix=folder))
+
+    if not blobs:
+        print(f"No files found under gs://{bucket_name}/{folder}")
+        return
+
+    print(f"Found {len(blobs)} file(s) under gs://{bucket_name}/{folder}")
+
+    for blob in blobs:
+        if blob.name.endswith("/"):  # Skip directory placeholders
+            continue
+
+        rel_path = os.path.relpath(blob.name, folder)
+        local_path = os.path.join(local_dir, rel_path)
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+
+        blob.download_to_filename(local_path)
+        print(f"Downloaded gs://{bucket_name}/{blob.name} → {local_path}")
+
+    print(f"Successfully downloaded {len(blobs)} file(s) to {local_dir}")

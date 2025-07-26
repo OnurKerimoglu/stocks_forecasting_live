@@ -1,0 +1,68 @@
+name: CD Deploy
+on:
+  push:
+    branches: [ dev ]
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    env:
+      IMAGE_TAG: ${{ github.sha }}
+      PROJECT_ID: stocks-forecasting-466906
+      REGION: europe-west1
+      REPO: stocks-forecasting-repo
+      IMAGE_NAME: stocks_forecasting_inference
+      BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
+      VERSION: latest
+      SERVICE_NAME: stocks-forecasting-service
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - id: "auth"
+        uses: "google-github-actions/auth@v1"
+        with:
+          credentials_json: "${{ secrets.GCP_SA_KEY }}"
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+
+      - name: "Use gcloud CLI"
+        run: "gcloud info"
+
+      - name: "Download extracted model"
+        run: |
+          echo "Downloading extracted model from GCS"
+          python scripts/download_extracted_model_from_cloud.py --refresh
+
+      - name: Build the image
+        run: |
+          echo "Building version ${VERSION}"
+          docker build -f Docker/Dockerfile -t ${IMAGE_URI} .
+
+      - name: Configure Docker to use GAR
+        run:
+          echo "Configuring Docker to auth with GAR"
+          gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
+
+      - name: Tag and push images to GAR
+        run: |
+            IMAGE_URI=${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${IMAGE_NAME}:${VERSION}-{BRANCH_NAME}
+            echo "Pushing Docker image to GAR: ${IMAGE_URI}"
+            docker push ${IMAGE_URI}
+
+      - name: Deploy the GAR image to Cloud Run
+        run: |
+            IMAGE_URI=${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${IMAGE_NAME}:${VERSION}-{BRANCH_NAME}
+            SERVICE_ACCOUNT="stocks-forecasting-mle@${PROJECT_ID}.iam.gserviceaccount.com"
+            echo "Deploying ${IMAGE_URI} to Cloud Run"
+            gcloud run deploy ${SERVICE_NAME} \
+            --image=${IMAGE_URI} \
+            --region=${REGION} \
+            --platform=managed \
+            --project=${PROJECT_ID} \
+            --service-account=${SERVICE_ACCOUNT} \
+            --allow-unauthenticated \
+            --port=9696
