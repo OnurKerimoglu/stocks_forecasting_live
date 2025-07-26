@@ -19,7 +19,7 @@ uv pip install -e .                         # Install the project as a package (
 pre-commit install                          # Enable pre-commit hooks
 ```
 Notes:
-- A [Makefile](Makefile) automates/facilitates certain operations, as will be referred below.
+- With [Makefile](Makefile) certain operations are automated, as will be referred below.
 - [ruff](https://docs.astral.sh/ruff/) is used as linter and formatter. Issue `make quality_checks` to run the quality checks manually.
 - [pytest](https://docs.pytest.org) is used as the testing framework. Issue `make tests` to run the (so far only unit) tests manually.
 - [pre-commit](https://pre-commit.com/) hooks will be enabled by the last command above. Only the default hooks, private key detection and linting/formatting hooks are specified (see the [config](.pre-commit-config.yaml))
@@ -33,8 +33,11 @@ This project uses certain GCP services for deployment, managed by [Hashicorp Ter
   - Cloud Functions Admin
   - Service Account User
   - Service Usage Admin
-- Create a key for the service account
+- Create a key for the service account and download it to your machine
+- In your shell, a variable GOOGLE_APPLICATION_CREDENTIALS should be pointing to the location of this key file. This can be achieved by, e.g., inserting `export GOOGLE_APPLICATION_CREDENTIALS=<path_to_your_gcp_key>` to your .bashrc.
+- Install [gcloud CLI](https://cloud.google.com/sdk/docs/install)
 - Create a file named 'terraform.tfvars' in the terraform directory that contains the path to your service account key
+- Adapt the contents of [config/gcs.yml](config/gcs.yml)
 - In the terraform directory:
   - `terraform init`: to initilize the backend and provider (google) plugins
   - `terraform apply`, and when prompted confirm: to generate the resources
@@ -63,8 +66,8 @@ If the deploy_training_workflow.py is not changed before deployment, the workflo
 ### Inference Pipeline
 
 #### Local Build
-Deployment of the inference pipeline is a two-step process:
-1. Model extraction from mlflow: issue `make extract_registered_model`, only after making sure that the mlflow server is running (if not `make mlflow_serve`). This will query mlflow and get the run_id of the model registered with alias 'champion' (i.e., last version), and copy the `model.pkl` and `requirements.txt` artifacts as well as the parameters as `params.json` into a `deployment` folder under project root (after removing its previous contents).
+Building the inference pipeline is a two-step process:
+1. Model extraction from mlflow: issue `make extract_registered_model`, only after making sure that the mlflow server is running (if not `make mlflow_serve`). This will query mlflow and get the run_id of the model registered with alias 'champion' (i.e., last version), and copy the `model.pkl` and `requirements.txt` artifacts as well as the parameters as `params.json` into an `extracted_model` folder under project root (after removing its previous contents), and sync the contents of this folder with the GCS `models_bucket` bucket defined in [config/gcs.yml](config/gcs.yml).
 2. Building the container image:  issue `make inference_build_local`. After triggering the `quality_checks` and `tests` targets (see [initial setup](#prerequisites-and-initial-setup)) to catch any obvious flaws, this will pack all necessary files and install packages needed for serving the inference pipeline.
 
 #### Local Testing
