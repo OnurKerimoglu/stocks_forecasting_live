@@ -36,7 +36,7 @@ mlflow_serve:
 	mlflow server --backend-store-uri sqlite:///mlflow.db --host 127.0.0.1 --port 5000 --default-artifact-root ./artifacts
 
 extract_registered_model:
-	python src/extract_mlflow_artifacts.py --cloudupload True
+	python src/extract_mlflow_artifacts.py --cloudupload
 
 inference_build_local: quality_checks tests
 	docker build -f Docker/Dockerfile -t ${IMAGE_URI} .

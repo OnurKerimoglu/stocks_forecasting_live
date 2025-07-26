@@ -1,3 +1,4 @@
+import argparse
 import datetime
 import json
 import os
@@ -99,15 +100,9 @@ def upload_to_gcs(configs: dict, localpath: str) -> None:
 
 
 if __name__ == "__main__":
-    import argparse
-
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--cloudupload",
-        type=bool,
-        required=False,
-        help="upload the model artifacts to cloud",
-        default=False,
-    )
+    parser.add_argument("--cloudupload", action="store_true")
+    parser.add_argument("--no-cloudupload", dest="cloud_upload", action="store_false")
+    parser.set_defaults(feature=True)
     args = parser.parse_args()
     main_extract_model(cloudupload=args.cloudupload)

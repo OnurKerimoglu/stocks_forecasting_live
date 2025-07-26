@@ -21,7 +21,7 @@ def download_extracted_model_from_gcs(refresh: bool = True) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--refresh", action="store_true")
-    parser.add_argument("--no-refresh", dest="feature", action="store_false")
+    parser.add_argument("--no-refresh", dest="refresh", action="store_false")
     parser.set_defaults(feature=True)
     args = parser.parse_args()
     download_extracted_model_from_gcs(refresh=args.refresh)
