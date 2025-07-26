@@ -1,3 +1,4 @@
+variable "gcp_key_path_src" {sensitive=true}
 variable "project" {
   description = "Project"
   default     = "stocks-forecasting-466906"
@@ -21,7 +22,11 @@ variable "location" {
   default     = "EU"
 }
 
-variable "gcp_key_path_src" {sensitive=true}
+variable "gcs_models_dev_bucket_name" {
+  description = "My Storage Bucket Name"
+  #Update the below to a unique bucket name
+  default     = "stocks-forecasting-models-dev"
+}
 
 variable "repo_name" {
   description = "The Artifact Registry repository name"
