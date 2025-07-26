@@ -1,0 +1,4 @@
+shared:
+  project: stocks-forecasting-466906
+dev:
+  models_bucket: stocks-forecasting-models-dev
