@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "flask>=3.1.1",
+    "google-cloud-storage>=3.2.0",
     "gunicorn>=23.0.0",
     "kaggle>=1.7.4.5",
     "mlflow>=3.1.1",
