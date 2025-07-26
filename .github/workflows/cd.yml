@@ -1,0 +1,44 @@
+name: CD Deploy
+on:
+  push:
+    branches: [ dev ]
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    env:
+      IMAGE_TAG: ${{ github.sha }}
+      REGION: europe-west1
+      PROJECT_ID: stocks-forecasting-466906
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - id: "auth"
+        uses: "google-github-actions/auth@v1"
+        with:
+          credentials_json: "${{ secrets.GCP_SA_KEY }}"
+
+      - name: Set up Google Cloud SDK
+        uses: google-github-actions/setup-gcloud@v1
+
+      - name: "Use gcloud CLI"
+        run: "gcloud info"
+
+      - name: Build the image
+        run: |
+             echo "not yet implemented"
+
+      - name: Configure Docker to use GAR
+        run: |
+             echo "not yet implemented"
+
+      - name: Tag and push images to GAR
+        run: |
+            echo "not yet implemented"
+
+      - name: Deploy the GAR image to Cloud Run
+        run: |
+            echo "not yet implemented"
