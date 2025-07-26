@@ -1,8 +1,8 @@
 import argparse
 import os
 
-from src.gcp_functions import download_directory
-from src.load_configs import Configs
+from scripts.gcp_functions import download_directory
+from scripts.load_configs import Configs
 
 
 def download_extracted_model_from_gcs(refresh: bool = True) -> None:

@@ -6,8 +6,8 @@ import os
 import mlflow
 from mlflow.tracking import MlflowClient
 
-from src.gcp_functions import clear_gcs_folder, upload_directory
-from src.load_configs import Configs
+from scripts.gcp_functions import clear_gcs_folder, upload_directory
+from scripts.load_configs import Configs
 
 # Global parameters
 mlflow.set_tracking_uri("http://127.0.0.1:5000")
