@@ -51,7 +51,7 @@ jobs:
       - name: "Download extracted model"
         run: |
           echo "Downloading extracted model from GCS"
-          python scripts/download_extracted_model_from_cloud.py --refresh
+          uv run python scripts/download_extracted_model_from_cloud.py --refresh
 
       - name: Build the image
         run: |
