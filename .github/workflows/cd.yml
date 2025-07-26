@@ -55,7 +55,8 @@ jobs:
 
       - name: Build the image
         run: |
-          echo "Building version ${VERSION}"
+          IMAGE_URI=${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${IMAGE_NAME}:${VERSION}-${BRANCH_NAME}
+          echo "Building image_uri:tag ${IMAGE_URI}"
           docker build -f Docker/Dockerfile -t ${IMAGE_URI} .
 
       - name: Configure Docker to use GAR
@@ -65,13 +66,13 @@ jobs:
 
       - name: Tag and push images to GAR
         run: |
-            IMAGE_URI=${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${IMAGE_NAME}:${VERSION}-{BRANCH_NAME}
+            IMAGE_URI=${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${IMAGE_NAME}:${VERSION}-${BRANCH_NAME}
             echo "Pushing Docker image to GAR: ${IMAGE_URI}"
             docker push ${IMAGE_URI}
 
       - name: Deploy the GAR image to Cloud Run
         run: |
-            IMAGE_URI=${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${IMAGE_NAME}:${VERSION}-{BRANCH_NAME}
+            IMAGE_URI=${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${IMAGE_NAME}:${VERSION}-${BRANCH_NAME}
             SERVICE_ACCOUNT="stocks-forecasting-mle@${PROJECT_ID}.iam.gserviceaccount.com"
             echo "Deploying ${IMAGE_URI} to Cloud Run"
             gcloud run deploy ${SERVICE_NAME} \
