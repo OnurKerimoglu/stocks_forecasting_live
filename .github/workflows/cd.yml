@@ -33,8 +33,8 @@ jobs:
           enable-cache: true
 
       - name: Install dependencies
-        run: >-
-            uv sync --locked --all-extras --dev;
+        run: |
+            uv sync --locked --all-extras --dev
             uv pip install -e .
 
       - id: "auth"
@@ -60,7 +60,7 @@ jobs:
           docker build -f Docker/Dockerfile -t ${IMAGE_URI} .
 
       - name: Configure Docker to use GAR
-        run:
+        run: |
           echo "Configuring Docker to auth with GAR"
           gcloud auth configure-docker ${REGION}-docker.pkg.dev --quiet
 
