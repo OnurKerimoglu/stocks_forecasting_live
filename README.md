@@ -70,7 +70,7 @@ If the deploy_training_workflow.py is not changed before deployment, the workflo
 #### Local Build
 Building the inference pipeline is a two-step process:
 1. Model extraction from mlflow: issue `make extract_registered_model`, only after making sure that the mlflow server is running (if not `make mlflow_serve`). This will query mlflow and get the run_id of the model registered with alias 'champion' (i.e., last version), and copy the `model.pkl` and `requirements.txt` artifacts as well as the parameters as `params.json` into an `extracted_model` folder under project root (after removing its previous contents), and sync the contents of this folder with the GCS `models_bucket` bucket defined in [config/gcs.yml](config/gcs.yml).
-2. Building the container image:  issue `make inference_build_local`. After triggering the `quality_checks` and `tests` targets (see [initial setup](#prerequisites-and-initial-setup)) to catch any obvious flaws, this will pack all necessary files and install packages needed for serving the inference pipeline.
+2. Building the container image:  issue `make inference_build_local`. After triggering the `quality_checks` and `tests` targets (see [initial setup](#prerequisites-and-initial-setup)) to catch any obvious flaws, and checking whether the branch is clean state, the [Dockerfile](Docker/Dockerfile) will pack all necessary files and install packages needed for serving the inference pipeline. The current branch name (in sanitized form) and the (short) SHA of the latest commit will be appended to the tag of the Image-URI to allow tracibility.
 
 #### Local Testing
 To test the inference pipeline and try some forecasts:
@@ -101,7 +101,6 @@ Assuming that the [Cloud Infrastructure](#cloud-infrastructure) instructions hav
 Note that, as the second step is a dependency of the third, and the first is a depednency of first, issuing directly the third will suffice.
 
 Once the deployment is done, a Service URL will be displayed. Note that this is a revision-specific URL that will change with every deployment. `cloud run services describe` with the correct parameters can provide the stable URL. The Makefile target `inference_test_deployment` makes use of this function and constructs a curl command for a default ticker to test the deployment.
-
 
 ### CI/CD Pipeline
 

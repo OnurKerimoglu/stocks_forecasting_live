@@ -8,10 +8,13 @@ VERSION      ?= latest
 SERVICE_NAME ?= stocks-forecasting-service
 SERVICE_ACCOUNT ?= stocks-forecasting-mle@$(PROJECT_ID).iam.gserviceaccount.com
 
-IMAGE_URI:=${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${IMAGE_NAME}:${VERSION}
+BRANCH_ST:=$(shell echo $$(git rev-parse --abbrev-ref HEAD) | sed 's/\//_/g')
+SHA:=$(shell git rev-parse --short HEAD)
+GIT_TREE_STATE:=$(shell test -z "$$(git status --porcelain)" && echo clean || echo dirty)
+IMAGE_URI:=${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${IMAGE_NAME}:${VERSION}-${BRANCH_ST}-${SHA}
 
 # Set default arguments
-train_deployment_mode ?= dev
+train_deployment_mode:=dev  # this is for training workflow
 
 # Targets
 quality_checks:
@@ -39,7 +42,12 @@ extract_registered_model:
 	python scripts/extract_mlflow_artifacts.py --cloudupload
 
 inference_build_local: quality_checks tests
-	docker build -f Docker/Dockerfile -t ${IMAGE_URI} .
+	@if [ "$(GIT_TREE_STATE)" = "dirty" ]; then \
+	  echo "You have uncommitted changes in the repo. Please commit or stash them."; \
+	else \
+	  echo "Branch is clean, building…"; \
+	  docker build -f Docker/Dockerfile -t ${IMAGE_URI} .; \
+	fi
 
 inference_serve_local:
 	docker run -it --rm -p 9696:9696 ${IMAGE_URI}
