@@ -8,27 +8,31 @@ from prefect.schedules import Interval
 
 
 def main(env: str) -> None:
+    assert env in ["test", "dev", "prod"]
     deployment_name = f"stocks_forecasting_train_flow_{env}"
-    if env == "prod":
-        print(
-            f"deploying the train pipeline {deployment_name} from git repository and with schedule"
-        )
+    print(f"deploying the train pipeline: {deployment_name}", end="")
+    # determine schedule
+    if env in ["test", "dev"]:
+        print(" without schedule", end="")
+        schedule = None
+    elif env == "prod":
+        print(" with weekly schedule", end="")
         schedule = Interval(
             timedelta(weeks=1),
-            anchor_date=datetime(2025, 7, 26, 0, 0),
+            anchor_date=datetime(2025, 7, 26, 5, 0),
             timezone="Germany/Berlin",
         )
+
+    # determine source
+    if env == "test":
+        print(" from the local filesystem")
+        source = os.path.dirname(__file__)
+    elif env in ["dev", "prod"]:
+        print(f" from git repository, {env} branch")
         source = GitRepository(
             url="https://github.com/OnurKerimoglu/stocks_forecasting_live.git",
-            branch="prod",
+            branch=env,
         )
-    elif env in ["test", "dev"]:
-        print(
-            f"deploying the train pipeline {deployment_name} from local filesystem and without schedule"
-        )
-        schedule = None
-        # source is the local file system
-        source = os.path.dirname(__file__)
 
     Flow.from_source(
         source=source, entrypoint="main_training.py:stocks_forecasting_training_flow"
