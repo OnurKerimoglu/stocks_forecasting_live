@@ -1,4 +1,5 @@
 [![CI Tests](https://github.com/OnurKerimoglu/stocks_forecasting_live/actions/workflows/ci.yml/badge.svg)](https://github.com/OnurKerimoglu/stocks_forecasting_live/actions/workflows/ci.yml)
+[![CD Deploy](https://github.com/OnurKerimoglu/stocks_forecasting_live/actions/workflows/cd.yml/badge.svg)](https://github.com/OnurKerimoglu/stocks_forecasting_live/actions/workflows/cd.yml)
 
 # Stocks Forecasting
 
@@ -18,7 +19,8 @@ uv sync                                     # Install the dependencies as specif
 uv pip install -e .                         # Install the project as a package (`uv pip install -e .`)
 pre-commit install                          # Enable pre-commit hooks
 ```
-Notes:
+#### Notes
+- All project dependencies, and their transitive dependencies are provided by [pyproject.toml](pyproject.toml) and [uv.lock](uv.lock), respectively
 - With [Makefile](Makefile) certain operations are automated, as will be referred below.
 - [ruff](https://docs.astral.sh/ruff/) is used as linter and formatter. Issue `make quality_checks` to run the quality checks manually.
 - [pytest](https://docs.pytest.org) is used as the testing framework. Issue `make tests` to run the (so far only unit) tests manually.
@@ -90,7 +92,7 @@ index
 2025-07-31  193.93      -0.72%
 ```
 
-#### Deploying the image to Cloud Run and Testing
+#### Manual Deployment of the image to Cloud Run and Testing
 Assuming that the [Cloud Infrastructure](#cloud-infrastructure) instructions have been successfully executed, three steps are needed for deployment:
 1. Build the image locally (see above)
 2. Publish the image to [Google Artifact Registery](https://cloud.google.com/artifact-registry/docs) (GAR): issue `make inference_publish`
@@ -98,4 +100,13 @@ Assuming that the [Cloud Infrastructure](#cloud-infrastructure) instructions hav
 
 Note that, as the second step is a dependency of the third, and the first is a depednency of first, issuing directly the third will suffice.
 
-Once the deployment is done, a Service URL will be displayed. Note that this is a revision-specific URL that will change with every deployment. `cloud run services describe` with the correct parameters can provide the stable URL. the Makefile target `inference_test_deployment` makes use of this function and constructs a curl command for a default ticker to test the deployment.
+Once the deployment is done, a Service URL will be displayed. Note that this is a revision-specific URL that will change with every deployment. `cloud run services describe` with the correct parameters can provide the stable URL. The Makefile target `inference_test_deployment` makes use of this function and constructs a curl command for a default ticker to test the deployment.
+
+
+### CI/CD Pipeline
+
+#### Continuous Integration:
+Any pull request to the main branches (`dev`, `prod`) will trigger the CI workflow on GitHub actions as defined in [.github/workflows/ci.yml](ci.yml). The CI Pipeline performs the quality (linting) checks (ruff check; ruff format) and unit tests with pytest (see the [Notes](#notes) under Prerequisites and Initial-Setup section)
+
+#### Continuous Deployment:
+Any successful merge to the `prod` branch will trigger the CD workflow (see [.github/workflows/cd.yml](cd.yml)), which simply automates the build-publish-deploy chain described above ([manual deployment](#manual-deployment-of-the-image-to-cloud-run-and-testing)).
