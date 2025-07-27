@@ -1,4 +1,5 @@
 [![CI Tests](https://github.com/OnurKerimoglu/stocks_forecasting_live/actions/workflows/ci.yml/badge.svg)](https://github.com/OnurKerimoglu/stocks_forecasting_live/actions/workflows/ci.yml)
+[![CD Deploy](https://github.com/OnurKerimoglu/stocks_forecasting_live/actions/workflows/cd.yml/badge.svg)](https://github.com/OnurKerimoglu/stocks_forecasting_live/actions/workflows/cd.yml)
 
 # Stocks Forecasting
 
@@ -18,7 +19,8 @@ uv sync                                     # Install the dependencies as specif
 uv pip install -e .                         # Install the project as a package (`uv pip install -e .`)
 pre-commit install                          # Enable pre-commit hooks
 ```
-Notes:
+#### Notes
+- All project dependencies, and their transitive dependencies are provided by [pyproject.toml](pyproject.toml) and [uv.lock](uv.lock), respectively
 - With [Makefile](Makefile) certain operations are automated, as will be referred below.
 - [ruff](https://docs.astral.sh/ruff/) is used as linter and formatter. Issue `make quality_checks` to run the quality checks manually.
 - [pytest](https://docs.pytest.org) is used as the testing framework. Issue `make tests` to run the (so far only unit) tests manually.
@@ -68,7 +70,7 @@ If the deploy_training_workflow.py is not changed before deployment, the workflo
 #### Local Build
 Building the inference pipeline is a two-step process:
 1. Model extraction from mlflow: issue `make extract_registered_model`, only after making sure that the mlflow server is running (if not `make mlflow_serve`). This will query mlflow and get the run_id of the model registered with alias 'champion' (i.e., last version), and copy the `model.pkl` and `requirements.txt` artifacts as well as the parameters as `params.json` into an `extracted_model` folder under project root (after removing its previous contents), and sync the contents of this folder with the GCS `models_bucket` bucket defined in [config/gcs.yml](config/gcs.yml).
-2. Building the container image:  issue `make inference_build_local`. After triggering the `quality_checks` and `tests` targets (see [initial setup](#prerequisites-and-initial-setup)) to catch any obvious flaws, this will pack all necessary files and install packages needed for serving the inference pipeline.
+2. Building the container image:  issue `make inference_build_local`. After triggering the `quality_checks` and `tests` targets (see [initial setup](#prerequisites-and-initial-setup)) to catch any obvious flaws, and checking whether the branch is clean state, the [Dockerfile](Docker/Dockerfile) will pack all necessary files and install packages needed for serving the inference pipeline. The current branch name (in sanitized form) and the (short) SHA of the latest commit will be appended to the tag of the Image-URI to allow tracibility.
 
 #### Local Testing
 To test the inference pipeline and try some forecasts:
@@ -90,7 +92,7 @@ index
 2025-07-31  193.93      -0.72%
 ```
 
-#### Deploying the image to Cloud Run and Testing
+#### Manual Deployment of the image to Cloud Run and Testing
 Assuming that the [Cloud Infrastructure](#cloud-infrastructure) instructions have been successfully executed, three steps are needed for deployment:
 1. Build the image locally (see above)
 2. Publish the image to [Google Artifact Registery](https://cloud.google.com/artifact-registry/docs) (GAR): issue `make inference_publish`
@@ -98,4 +100,12 @@ Assuming that the [Cloud Infrastructure](#cloud-infrastructure) instructions hav
 
 Note that, as the second step is a dependency of the third, and the first is a depednency of first, issuing directly the third will suffice.
 
-Once the deployment is done, a Service URL will be displayed. Note that this is a revision-specific URL that will change with every deployment. `cloud run services describe` with the correct parameters can provide the stable URL. the Makefile target `inference_test_deployment` makes use of this function and constructs a curl command for a default ticker to test the deployment.
+Once the deployment is done, a Service URL will be displayed. Note that this is a revision-specific URL that will change with every deployment. `cloud run services describe` with the correct parameters can provide the stable URL. The Makefile target `inference_test_deployment` makes use of this function and constructs a curl command for a default ticker to test the deployment.
+
+### CI/CD Pipeline
+
+#### Continuous Integration:
+Any pull request to the main branches (`dev`, `prod`) will trigger the CI workflow on GitHub actions as defined in [.github/workflows/ci.yml](ci.yml). The CI Pipeline performs the quality (linting) checks (ruff check; ruff format) and unit tests with pytest (see the [Notes](#notes) under Prerequisites and Initial-Setup section)
+
+#### Continuous Deployment:
+Any successful merge to the `prod` branch will trigger the CD workflow (see [.github/workflows/cd.yml](cd.yml)), which simply automates the build-publish-deploy chain described above ([manual deployment](#manual-deployment-of-the-image-to-cloud-run-and-testing)).
