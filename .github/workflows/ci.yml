@@ -1,9 +1,9 @@
 name: CI Tests
 on:
-  push:
-    branches: [ dev ]
   pull_request:
-    branches: [ dev ]
+    branches:
+      - dev
+      - prod
 
 jobs:
   quality_checks_tests:
