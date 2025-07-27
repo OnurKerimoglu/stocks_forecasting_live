@@ -95,7 +95,7 @@ jobs:
             SERVICE_ACCOUNT="stocks-forecasting-mle@${PROJECT_ID}.iam.gserviceaccount.com"
             echo "Deploying ${IMAGE_URI} to Cloud Run"
             gcloud run deploy ${{ steps.vars.outputs.service_name }} \
-            --image=${{ steps.vars.outputs.image_uri }}\
+            --image=${{ steps.vars.outputs.image_uri }} \
             --region=${REGION} \
             --platform=managed \
             --project=${PROJECT_ID} \
