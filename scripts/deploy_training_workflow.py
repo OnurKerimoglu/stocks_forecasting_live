@@ -26,7 +26,8 @@ def main(env: str) -> None:
     # determine source
     if env == "test":
         print(" from the local filesystem")
-        source = os.path.dirname(__file__)
+        rootpath = os.path.dirname(os.path.dirname(__file__))
+        source = rootpath  # this is where the main_training.py is expected to be found
     elif env in ["dev", "prod"]:
         print(f" from git repository, {env} branch")
         source = GitRepository(
