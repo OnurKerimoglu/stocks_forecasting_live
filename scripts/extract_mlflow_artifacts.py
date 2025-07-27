@@ -19,12 +19,12 @@ rootpath = os.path.dirname(os.path.dirname(__file__))
 LOCALPATH = os.path.join(rootpath, "extracted_model")
 
 
-def main_extract_model(cloudupload: bool = True) -> None:
+def main_extract_model(env: str, cloudupload: bool = True) -> None:
     run_id, params = retrieve_registered_model()
     store_model_artifacts_local(run_id, params)
     print("model parameters are extracted into: ", LOCALPATH)
     if cloudupload:
-        configs = Configs()
+        configs = Configs(env)
         upload_to_gcs(configs.cloud, localpath=LOCALPATH)
     else:
         print("model artifacts are not uploaded to GCS")
@@ -100,8 +100,9 @@ def upload_to_gcs(configs: dict, localpath: str) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
+    parser.add_argument("--env", type=str, required=True, help="test, dev, prod")
     parser.add_argument("--cloudupload", action="store_true")
     parser.add_argument("--no-cloudupload", dest="cloud_upload", action="store_false")
     parser.set_defaults(feature=True)
     args = parser.parse_args()
-    main_extract_model(cloudupload=args.cloudupload)
+    main_extract_model(env=args.env, cloudupload=args.cloudupload)

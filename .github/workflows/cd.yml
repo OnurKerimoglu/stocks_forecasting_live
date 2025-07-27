@@ -27,22 +27,22 @@ jobs:
       - name: Set derived variables
         id: vars
         run: |
-          # determine branch suffix
+          # determine simplified branch name (test, dev, prod)
           if [[ "${GITHUB_REF_NAME}" == "dev" || "${GITHUB_REF_NAME}" == "prod" ]]; then
-            suffix="${GITHUB_REF_NAME}"
+            BRANCH_SIMPLE="${GITHUB_REF_NAME}"
           else
-            suffix="test"
+            BRANCH_SIMPLE="test"
           fi
-          echo "image uri and service name will be suffixed with ${suffix}"
+          echo "image uri and service name will be suffixed with ${BRANCH_SIMPLE}"
 
           # compute image URI and service name
-          image_uri="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${IMAGE_NAME}:${VERSION}-${suffix}"
-          service_name="${SERVICE_NAME_ROOT}-${suffix}"
+          image_uri="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${IMAGE_NAME}:${VERSION}-${BRANCH_SIMPLE}"
+          service_name="${SERVICE_NAME_ROOT}-${BRANCH_SIMPLE}"
 
           # emit to GitHub Actions
-          echo "branch_suffix=${suffix}"      >> $GITHUB_OUTPUT
-          echo "image_uri=${image_uri}"       >> $GITHUB_OUTPUT
-          echo "service_name=${service_name}" >> $GITHUB_OUTPUT
+          echo "branch_simple=${BRANCH_SIMPLE}"   >> $GITHUB_OUTPUT
+          echo "image_uri=${image_uri}"           >> $GITHUB_OUTPUT
+          echo "service_name=${service_name}"     >> $GITHUB_OUTPUT
 
       - name: Set up python
         uses: actions/setup-python@v5
@@ -73,8 +73,8 @@ jobs:
 
       - name: "Download extracted model"
         run: |
-          echo "Downloading extracted model from GCS"
-          uv run python scripts/download_extracted_model_from_cloud.py --refresh
+          echo "Downloading extracted model from GCS bucket: ${{ steps.vars.outputs.branch_simple }}"
+          uv run python scripts/download_extracted_model_from_cloud.py --env ${{ steps.vars.outputs.branch_simple }} --refresh
 
       - name: Build the image
         run: |

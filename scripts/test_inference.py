@@ -1,8 +1,14 @@
 import pandas as pd
 import requests
+from gcp_functions import get_gcrun_service_url
+from load_configs import Configs
 
 
-def main(url: str, ticker: str) -> None:
+def main(env: str, ticker: str) -> None:
+    # Find the correct URL for the specified environment
+    url = find_url_for_env(env)
+
+    # Send the request
     resp = requests.post(url, json={"ticker": ticker}).json()
 
     # Build DataFrames
@@ -26,6 +32,30 @@ def main(url: str, ticker: str) -> None:
     print(forecast_df.round({"close": 2, "returns": 6}))
 
 
+def find_url_for_env(env: str) -> str:
+    assert env in ["local", "test", "dev", "prod"]
+
+    if env == "local":
+        url = "http://0.0.0.0:9696/forecast"
+    else:
+        # url = get_static_url_for_env(env)
+        configs = Configs(env).cloud
+        service_name_root = configs["gcs"]["service_name_root"]
+        url_root = get_gcrun_service_url(
+            service_name=f"{service_name_root}-{env}",
+            region=configs["gcs"]["region"],
+            project_id=configs["gcs"]["project"],
+        )
+        url = f"{url_root}/forecast"
+    print(f"for the requested {env} environment, service url is: {url}")
+    return url
+
+
+def get_static_url_for_env(env: str) -> str:
+    url = f"https://stocks-forecasting-service-{env}-qlypn5u2fq-ew.a.run.app"
+    return url
+
+
 if __name__ == "__main__":
     import argparse
 
@@ -39,5 +69,13 @@ if __name__ == "__main__":
         help="ticker symbol, e.g., 'AMZN",
         default="AMZN",
     )
+    parser.add_argument(
+        "--env",
+        type=str,
+        required=False,
+        help="deployed environment. Options: local, test, dev, prod",
+        default="local",
+    )
     args = parser.parse_args()
-    main(url="http://localhost:9696/forecast", ticker=args.ticker)
+
+    main(env=args.env, ticker=args.ticker)

@@ -22,10 +22,22 @@ variable "location" {
   default     = "EU"
 }
 
+variable "gcs_models_test_bucket_name" {
+  description = "My Storage Bucket Name"
+  #Update the below to a unique bucket name
+  default     = "stocks-forecasting-models-test"
+}
+
 variable "gcs_models_dev_bucket_name" {
   description = "My Storage Bucket Name"
   #Update the below to a unique bucket name
   default     = "stocks-forecasting-models-dev"
+}
+
+variable "gcs_models_prod_bucket_name" {
+  description = "My Storage Bucket Name"
+  #Update the below to a unique bucket name
+  default     = "stocks-forecasting-models-prod"
 }
 
 variable "repo_name" {

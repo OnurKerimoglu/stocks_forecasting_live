@@ -1,3 +1,4 @@
+import argparse
 import os
 from datetime import datetime, timedelta
 
@@ -6,61 +7,44 @@ from prefect.runner.storage import GitRepository
 from prefect.schedules import Interval
 
 
-def main(mode: str) -> None:
-    if mode == "prod":
-        print(
-            f"deploying the train pipeline in {args.mode} mode from git repository and with schedule"
-        )
+def main(env: str) -> None:
+    assert env in ["test", "dev", "prod"]
+    deployment_name = f"stocks_forecasting_train_flow_{env}"
+    print(f"deploying the train pipeline: {deployment_name}", end="")
+    # determine schedule
+    if env in ["test", "dev"]:
+        print(" without schedule", end="")
+        schedule = None
+    elif env == "prod":
+        print(" with weekly schedule", end="")
         schedule = Interval(
             timedelta(weeks=1),
-            anchor_date=datetime(2025, 7, 22, 0, 0),
+            anchor_date=datetime(2025, 7, 26, 5, 0),
             timezone="Germany/Berlin",
         )
+
+    # determine source
+    if env == "test":
+        print(" from the local filesystem")
+        source = os.path.dirname(__file__)
+    elif env in ["dev", "prod"]:
+        print(f" from git repository, {env} branch")
         source = GitRepository(
             url="https://github.com/OnurKerimoglu/stocks_forecasting_live.git",
-            branch="prod",
+            branch=env,
         )
-    elif mode == "dev":
-        print(
-            f"deploying the train pipeline in {args.mode} mode from local filesystem and without schedule"
-        )
-        schedule = None
-        # source is the local file system
-        source = os.path.dirname(__file__)
 
     Flow.from_source(
         source=source, entrypoint="main_training.py:stocks_forecasting_training_flow"
     ).deploy(
-        name=f"stocks_forecasting_train_flow_{mode}",
+        name=deployment_name,
         schedule=schedule,
         work_pool_name="stocks_forecasting_live_local",
     )
 
 
 if __name__ == "__main__":
-    import argparse
-
     parser = argparse.ArgumentParser(description="Deploy the train workflow to prefect")
-    parser.add_argument(
-        "--mode", type=str, required=False, help="dev or prod", default="dev"
-    )
+    parser.add_argument("--env", type=str, required=True, help="dev or prod")
     args = parser.parse_args()
-    main(mode=args.mode)
-
-
-# stocks_forecasting_training_flow.serve(
-#   name="stocks_forecasting_train_workflow",
-#   schedule=Interval(
-#     timedelta(weeks=1),
-#     anchor_date=datetime(2025, 7, 22, 0, 0),
-#     timezone="Germany/Berlin"
-#   )
-# )
-
-# stocks_forecasting_training_pipeline.deploy(
-#     name="stocks_forecasting_train",
-#     work_pool_name="stocks_forecasting_live_local",
-#     image="my-image",
-#     push=False,
-#     # cron="* * * * *",
-# )
+    main(env=args.env)

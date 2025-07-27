@@ -1,4 +1,5 @@
 import os
+import subprocess
 
 from google.cloud import storage
 
@@ -107,3 +108,20 @@ def download_directory(
         print(f"Downloaded gs://{bucket_name}/{blob.name} → {local_path}")
 
     print(f"Successfully downloaded {len(blobs)} file(s) to {local_dir}")
+
+
+def get_gcrun_service_url(service_name: str, region: str, project_id: str) -> str:
+    cmd = [
+        "gcloud",
+        "run",
+        "services",
+        "describe",
+        service_name,
+        "--project",
+        project_id,
+        "--region",
+        region,
+        "--format=value(status.url)",
+    ]
+    url = subprocess.check_output(cmd, stderr=subprocess.DEVNULL).decode().strip()
+    return url
