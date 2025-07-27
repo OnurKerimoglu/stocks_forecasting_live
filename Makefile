@@ -40,7 +40,7 @@ prefect_create_workpool:
 	prefect work-pool create --type process stocks_forecasting_live_local
 
 prefect_deploy_train:
-	python deploy_training_workflow.py --env ${BRANCH_SIMPLE}
+	python scripts/deploy_training_workflow.py --env ${BRANCH_SIMPLE}
 	prefect worker start --pool "stocks_forecasting_live_local"
 
 extract_registered_model:
