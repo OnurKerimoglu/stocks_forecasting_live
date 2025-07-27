@@ -33,6 +33,7 @@ jobs:
           else
             suffix="test"
           fi
+          echo "image uri and service name will be suffixed with ${suffix}"
 
           # compute image URI and service name
           image_uri="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${IMAGE_NAME}:${VERSION}-${suffix}"
@@ -95,7 +96,7 @@ jobs:
             SERVICE_ACCOUNT="stocks-forecasting-mle@${PROJECT_ID}.iam.gserviceaccount.com"
             echo "Deploying ${IMAGE_URI} to Cloud Run"
             gcloud run deploy ${{ steps.vars.outputs.service_name }} \
-            --image=${{ steps.vars.outputs.image_uri }}\
+            --image=${{ steps.vars.outputs.image_uri }} \
             --region=${REGION} \
             --platform=managed \
             --project=${PROJECT_ID} \
