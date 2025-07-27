@@ -2,6 +2,7 @@ name: CD Deploy
 on:
   push:
     branches:
+      - dev
       - prod
 
 jobs:
@@ -16,11 +17,31 @@ jobs:
       IMAGE_NAME: stocks_forecasting_inference
       BRANCH_NAME: ${{ github.head_ref || github.ref_name }}
       VERSION: latest
-      SERVICE_NAME: stocks-forecasting-service
+      SERVICE_NAME_ROOT: stocks-forecasting-service
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      # Step 1: define derived variables and emit as outputs
+      - name: Set derived variables
+        id: vars
+        run: |
+          # determine branch suffix
+          if [[ "${GITHUB_REF_NAME}" == "dev" || "${GITHUB_REF_NAME}" == "prod" ]]; then
+            suffix="${GITHUB_REF_NAME}"
+          else
+            suffix="test"
+          fi
+
+          # compute image URI and service name
+          image_uri="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${IMAGE_NAME}:${VERSION}-${suffix}"
+          service_name="${SERVICE_NAME_ROOT}-${suffix}"
+
+          # emit to GitHub Actions
+          echo "branch_suffix=${suffix}"      >> $GITHUB_OUTPUT
+          echo "image_uri=${image_uri}"       >> $GITHUB_OUTPUT
+          echo "service_name=${service_name}" >> $GITHUB_OUTPUT
 
       - name: Set up python
         uses: actions/setup-python@v5
@@ -56,9 +77,8 @@ jobs:
 
       - name: Build the image
         run: |
-          IMAGE_URI=${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${IMAGE_NAME}:${VERSION}-${BRANCH_NAME}
-          echo "Building image_uri:tag ${IMAGE_URI}"
-          docker build -f Docker/Dockerfile -t ${IMAGE_URI} .
+          echo "Building image_uri:tag ${{ steps.vars.outputs.image_uri }}"
+          docker build -f Docker/Dockerfile -t ${{ steps.vars.outputs.image_uri }} .
 
       - name: Configure Docker to use GAR
         run: |
@@ -67,17 +87,15 @@ jobs:
 
       - name: Tag and push images to GAR
         run: |
-            IMAGE_URI=${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${IMAGE_NAME}:${VERSION}-${BRANCH_NAME}
-            echo "Pushing Docker image to GAR: ${IMAGE_URI}"
-            docker push ${IMAGE_URI}
+            echo "Pushing Docker image to GAR: ${{ steps.vars.outputs.image_uri }}"
+            docker push ${{ steps.vars.outputs.image_uri }}
 
       - name: Deploy the GAR image to Cloud Run
         run: |
-            IMAGE_URI=${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${IMAGE_NAME}:${VERSION}-${BRANCH_NAME}
             SERVICE_ACCOUNT="stocks-forecasting-mle@${PROJECT_ID}.iam.gserviceaccount.com"
             echo "Deploying ${IMAGE_URI} to Cloud Run"
-            gcloud run deploy ${SERVICE_NAME} \
-            --image=${IMAGE_URI} \
+            gcloud run deploy ${{ steps.vars.outputs.service_name }} \
+            --image=${{ steps.vars.outputs.image_uri }}\
             --region=${REGION} \
             --platform=managed \
             --project=${PROJECT_ID} \

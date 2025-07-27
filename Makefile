@@ -5,13 +5,21 @@ REGION       ?= europe-west1
 REPO         ?= stocks-forecasting-repo
 IMAGE_NAME   ?= stocks_forecasting_inference
 VERSION      ?= latest
-SERVICE_NAME ?= stocks-forecasting-service
+SERVICE_NAME_ROOT ?= stocks-forecasting-service
 SERVICE_ACCOUNT ?= stocks-forecasting-mle@$(PROJECT_ID).iam.gserviceaccount.com
 
-BRANCH_ST:=$(shell echo $$(git rev-parse --abbrev-ref HEAD) | sed 's/\//_/g')
-SHA:=$(shell git rev-parse --short HEAD)
 GIT_TREE_STATE:=$(shell test -z "$$(git status --porcelain)" && echo clean || echo dirty)
-IMAGE_URI:=${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${IMAGE_NAME}:${VERSION}-${BRANCH_ST}-${SHA}
+BRANCH_ST:=$(shell echo $$(git rev-parse --abbrev-ref HEAD) | sed 's/\//_/g')
+# if BRANCH_ST is not dev or prod, service name suffix will be test
+ifeq ($(BRANCH_ST),dev)
+  BRANCH_SUFFIX := dev
+else ifeq ($(BRANCH_ST),prod)
+  BRANCH_SUFFIX := prod
+else
+  BRANCH_SUFFIX := test
+endif
+IMAGE_URI:=${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${IMAGE_NAME}:${VERSION}-${BRANCH_SUFFIX}
+SERVICE_NAME:=${SERVICE_NAME_ROOT}-${BRANCH_SUFFIX}
 
 # Set default arguments
 train_deployment_mode:=dev  # this is for training workflow
