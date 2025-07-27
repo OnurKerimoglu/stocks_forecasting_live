@@ -12,17 +12,14 @@ GIT_TREE_STATE:=$(shell test -z "$$(git status --porcelain)" && echo clean || ec
 BRANCH_ST:=$(shell echo $$(git rev-parse --abbrev-ref HEAD) | sed 's/\//_/g')
 # if BRANCH_ST is not dev or prod, service name suffix will be test
 ifeq ($(BRANCH_ST),dev)
-  BRANCH_SUFFIX := dev
+  BRANCH_SIMPLE := dev
 else ifeq ($(BRANCH_ST),prod)
-  BRANCH_SUFFIX := prod
+  BRANCH_SIMPLE := prod
 else
-  BRANCH_SUFFIX := test
+  BRANCH_SIMPLE := test
 endif
-IMAGE_URI:=${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${IMAGE_NAME}:${VERSION}-${BRANCH_SUFFIX}
-SERVICE_NAME:=${SERVICE_NAME_ROOT}-${BRANCH_SUFFIX}
-
-# Set default arguments
-train_deployment_mode:=dev  # this is for training workflow
+IMAGE_URI:=${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO}/${IMAGE_NAME}:${VERSION}-${BRANCH_SIMPLE}
+SERVICE_NAME:=${SERVICE_NAME_ROOT}-${BRANCH_SIMPLE}
 
 # Targets
 quality_checks:
@@ -33,6 +30,9 @@ quality_checks:
 tests:
 	pytest tests/
 
+mlflow_serve:
+	mlflow server --backend-store-uri sqlite:///mlflow.db --host 127.0.0.1 --port 5000 --default-artifact-root ./artifacts
+
 prefect_serve:
 	prefect server start
 
@@ -40,14 +40,11 @@ prefect_create_workpool:
 	prefect work-pool create --type process stocks_forecasting_live_local
 
 prefect_deploy_train:
-	python deploy_training_workflow.py --mode ${train_deployment_mode}
+	python deploy_training_workflow.py --env ${BRANCH_SIMPLE}
 	prefect worker start --pool "stocks_forecasting_live_local"
 
-mlflow_serve:
-	mlflow server --backend-store-uri sqlite:///mlflow.db --host 127.0.0.1 --port 5000 --default-artifact-root ./artifacts
-
 extract_registered_model:
-	python scripts/extract_mlflow_artifacts.py --cloudupload
+	python scripts/extract_mlflow_artifacts.py --env ${BRANCH_SIMPLE} --cloudupload
 
 inference_build_local: quality_checks tests
 	@if [ "$(GIT_TREE_STATE)" = "dirty" ]; then \
@@ -59,9 +56,6 @@ inference_build_local: quality_checks tests
 
 inference_serve_local:
 	docker run -it --rm -p 9696:9696 ${IMAGE_URI}
-
-inference_test_local:
-	python scripts/test_inference.py --ticker GOOG
 
 inference_publish: inference_build_local
 	@echo "Configuring Docker to auth with GAR"
@@ -81,7 +75,7 @@ inference_deploy: inference_publish
 	  --allow-unauthenticated \
 	  --port=9696
 
-inference_test_deployment:
+inference_test_raw:
 	@echo "Testing Cloud Run service"
 	@SERVICE_URL="$$(gcloud run services describe $(SERVICE_NAME) \
 	  --project=$(PROJECT_ID) \
@@ -91,3 +85,6 @@ inference_test_deployment:
 	curl -X POST "$$SERVICE_URL/forecast" \
 	  -H "Content-Type: application/json" \
 	  -d '{"ticker":"GOOG"}'
+
+inference_test_pretty:
+	python scripts/test_inference.py --env ${BRANCH_SIMPLE} --ticker GOOG
