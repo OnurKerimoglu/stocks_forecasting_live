@@ -65,7 +65,7 @@ To stop the worker, and the prefect server, hit Ctrl+C in the respective termina
 #### Manually Triggering an Experiment on the Training Pipeline
 
 A manual run can be triggered on the `dev` and `test` deployment (on `prod` deployment too, but that one is intended for scheduled runs, see the previous section). The run can be triggered, e.g., on the GUI, Deployments tab, 'Play' button on the top-right corner. Three parameters can be optionally set via 'Custom Run':
-  - test_mode (default: True): raw_data will not be removed after execution
+  - env (default: 'prod'): this will determine the storage location of the sampled data on GCS
   - use_sample_tickers_for_training (default: True): Only two tickers (['AMZN', 'APPL']) will be used to train the model (these two tickers will be used for the model evaluation anyway, independent of the selection here)
   - select_only_latest (default: True): if True, the best model run will be selected only among runs from the current date, i.e., ignoring the previous runs
 

@@ -8,7 +8,9 @@ from statsmodels.tsa.deterministic import CalendarFourier, DeterministicProcess
 logger = logging.getLogger(__name__)
 
 
-def load_raw_data(datapath: str, user: str, datasetname: str) -> pd.DataFrame:
+def load_raw_data(
+    datapath: str, user: str, datasetname: str
+) -> tuple[pd.DataFrame, str]:
     """
     Loads raw data from a specified dataset using the Kaggle API.
 
@@ -29,26 +31,37 @@ def load_raw_data(datapath: str, user: str, datasetname: str) -> pd.DataFrame:
     Returns:
     pd.DataFrame
         A DataFrame containing the raw data from the dataset.
+    access_date_str : str
+        The date string of when the raw data was accessed.
     """
     import kaggle
 
     logger.info(f"datapath: {datapath}")
 
     os.makedirs(datapath, exist_ok=True)
-    if not os.path.exists(os.path.join(datapath, "World-Stock-Prices-Dataset.csv")):
+
+    raw_fpath_full = os.path.join(datapath, "World-Stock-Prices-Dataset.csv")
+    if not os.path.exists(raw_fpath_full):
         kaggle.api.dataset_download_files(
             dataset=f"{user}/{datasetname}", path=datapath, unzip=True
         )
+        access_date_str = datetime.now().strftime("%Y-%m-%d")
+        logger.info(
+            f"Raw data was not found in location {datapath}, downloading from kaggle"
+        )
     else:
-        logger.info(f"Raw data already found in location {datapath}")
-
-    raw_fpath = os.listdir(datapath)[0]
-    raw_fpath_full = os.path.join(datapath, raw_fpath)
+        access_date_timestamp = os.path.getmtime(raw_fpath_full)
+        access_date_str = datetime.fromtimestamp(access_date_timestamp).strftime(
+            "%Y-%m-%d"
+        )
+        logger.info(
+            f"Raw data already found in location {datapath}, last modified on {access_date_str}"
+        )
 
     logger.info(f"reading raw data from: {raw_fpath_full}")
     df_raw = pd.read_csv(raw_fpath_full)
     df_raw["Date"] = pd.to_datetime(df_raw["Date"], utc=True).dt.tz_convert(None)
-    return df_raw
+    return df_raw, access_date_str
 
 
 def remove_raw_data(datapath: str) -> None:
@@ -108,8 +121,10 @@ def sample_tickers_dates(
     df_clean: pd.DataFrame,
     tickers: list | None = None,
     startdate: datetime | None = None,
-    clean_sample_fpath_full: str | None = None,
-) -> pd.DataFrame:
+    source: str = "Kaggle",
+    clean_sample_fdir: str | None = None,
+    access_date_str: str | None = None,
+) -> tuple[pd.DataFrame, str]:
     """
     Samples a subset of tickers and/or dates from a cleaned DataFrame.
 
@@ -126,30 +141,65 @@ def sample_tickers_dates(
     startdate : datetime or None, optional
         The start date to sample from the data. If None, all dates are kept.
         Defaults to None.
-    clean_sample_fpath_full : str or None, optional
-        The path to write the sampled DataFrame to a CSV file. If None, the sampled
-        DataFrame is not written to file. Defaults to None.
+    source: src, optional
+        The source of the data.
+        Defaults to 'Kaggle', which indicates that the data was downloaded from Kaggle.
+    clean_sample_fdir : str or None, optional
+        Path to the local directory in which the sampled DataFrame will be stored as CSV.
+        If None (default), the DataFrame is not written to file.
+    access_date_str : str or None, optional
+        The date of the data access.
+        Defaults to None
 
     Returns:
     pd.DataFrame
         A new DataFrame with the sampled data, sorted by 'Ticker' and 'Date'.
+    str
+        The file name of the sampled DataFrame in the local directory.
     """
     if tickers is None:
         df_clean_sample = df_clean.copy()
+        ticker_suffix = "WSPall"
     else:
         logger.info(f"Sampling tickers: {tickers}")
         df_clean_sample = df_clean[(df_clean["Ticker"].isin(tickers))].copy()
+        ticker_suffix = "Tickers_" + "-".join(tickers)
     if startdate is not None:
         logger.info(f"Sampling from start date: {startdate}")
         df_clean_sample = df_clean_sample[df_clean_sample["Date"] >= startdate].copy()
+        sample_date_suffix = f"_from_{startdate.strftime('%Y-%m-%d')}"
+    else:
+        sample_date_suffix = ""
+
     # df_clean_sample.Date = pd.to_datetime(df_clean_sample['Date'])
     # logger.info(f'sample shape: {df_clean_sample.shape}')
     # df_clean_sample.sort_values('Date', ascending=True).head()
-    if clean_sample_fpath_full is not None:
-        df_clean_sample.to_csv(clean_sample_fpath_full, index=False)
-        logger.info(f"Wrote clean sample to: {clean_sample_fpath_full}")
+    # construct an id for archiving data
+    if clean_sample_fdir is not None:
+        access_date_suffix = f"Access_{access_date_str}"
+        fname_root = (
+            f"{source}_{access_date_suffix}_{ticker_suffix}{sample_date_suffix}"
+        )
+        fpath = store_df_locally(df_clean_sample, fname_root, clean_sample_fdir)
+        logger.info(f"Wrote cleaned sample to: {fpath}")
+    else:
+        fpath = None
     df_clean_sample.sort_values(["Ticker", "Date"], inplace=True)
-    return df_clean_sample
+
+    return df_clean_sample, fpath
+
+
+def store_df_locally(
+    df: pd.DataFrame, fname_root: str, local_fdir: str, format: str = "parquet"
+) -> str:
+    os.makedirs(local_fdir, exist_ok=True)
+    if format == "parquet":
+        fpath = os.path.join(local_fdir, f"{fname_root}.parquet")
+        df.to_parquet(fpath)
+    elif format == "csv":
+        fpath = os.path.join(local_fdir, f"{fname_root}.csv")
+        df.to_csv(fpath)
+    return fpath
 
 
 def split_train_test_panel(
