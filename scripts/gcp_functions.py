@@ -1,4 +1,5 @@
 import io
+import json
 import os
 import pickle
 import subprocess
@@ -31,6 +32,17 @@ def load_pickle_from_gcs(project_id: str, bucket_name: str, gcs_path: str) -> No
     with blob.open(mode="rb") as f:
         loaded_obj = pickle.load(f)
     return loaded_obj
+
+
+def load_json_from_gcs(project_id: str, bucket_name: str, gcs_path: str) -> None:
+    # Initialize client
+    client = storage.Client(project=project_id)
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(gcs_path)
+
+    # load from pickle
+    dict = json.loads(blob.download_as_string(client=None))
+    return dict
 
 
 def clear_gcs_folder(project_id: str, bucket_name: str, folder: str) -> None:
