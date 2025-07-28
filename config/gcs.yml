@@ -2,6 +2,7 @@ shared:
   project: stocks-forecasting-466906
   region: europe-west1
   service_name_root: stocks-forecasting-service
+  data_monitoring_bucket: stocks-forecasting-data-monitoring
 test:
   models_bucket: stocks-forecasting-models-test
 dev:
