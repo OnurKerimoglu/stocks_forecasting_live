@@ -9,7 +9,7 @@ datasources:
     access: proxy
     url: db:5432
     database: stocks
-    user: admin
+    user: postgres
     secureJsonData:
       password: 'admin'
     jsonData:
