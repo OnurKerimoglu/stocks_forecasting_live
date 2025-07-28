@@ -173,10 +173,10 @@ def run_single_experiment(
             df_test, lags=STATIC_PARS["lags"], split="test", CldrFeats=CldrFeats
         )
         X_train, y_train = create_X_y_multistep(
-            df_train_feats, steps=STATIC_PARS["steps"], target=TARGET, split="train"
+            df_train_feats, steps=STATIC_PARS["steps"], target=TARGET
         )
         X_test, y_test = create_X_y_multistep(
-            df_test_feats, steps=STATIC_PARS["steps"], target=TARGET, split="test"
+            df_test_feats, steps=STATIC_PARS["steps"], target=TARGET
         )
         # Instantiate and train a model
         Regularization = exp["ModReg"] if "ModReg" in exp.keys() else True

@@ -406,11 +406,7 @@ def make_multistep_target(y: pd.Series, steps: int) -> pd.DataFrame:
 
 
 def create_X_y_multistep(
-    df_all: pd.DataFrame,
-    steps: int = 5,
-    target: str = "returns",
-    verbose: bool = False,
-    split: str | None = None,
+    df_all: pd.DataFrame, steps: int = 5, target: str = "returns", verbose: bool = False
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     """
     Creates featuress and multi-step targets.
