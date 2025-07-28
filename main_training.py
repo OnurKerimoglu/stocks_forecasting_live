@@ -19,6 +19,8 @@ from data import (
     split_train_test_panel,
 )
 from models import create_fit_xgbregressor_chain, evaluate_all
+from scripts.gcp_functions import upload_file_to_folder
+from scripts.load_configs import Configs
 from utils import get_pipreqs_from_pyproject
 
 # Global parameters
@@ -46,7 +48,7 @@ mlflow.set_experiment(EXP_NAME)
 
 @flow(name="stocks_forecasting_training_flow")
 def stocks_forecasting_training_flow(
-    test_mode: bool = True,
+    env: str = "prod",
     use_sample_tickers_for_training: bool = True,
     select_only_latest: bool = True,
 ) -> None:
@@ -77,8 +79,19 @@ def stocks_forecasting_training_flow(
     """
     logger = get_run_logger()
 
+    assert env in ["test", "dev", "prod"]
+
     # step1: base data prep (task as sub-flow)
-    df, df_train, df_test = base_data_prep(use_sample_tickers_for_training)
+    if env in ["dev", "prod"]:
+        if use_sample_tickers_for_training:
+            logger.info(
+                f"As running in a primary env {env}, use_sample_tickers_for_training is set to False"
+            )
+            use_sample_tickers_for_training = False
+    clean_sample_fdir = os.path.join(DATAPATH, f"sample_cleaned_samples_{env}")
+    df, df_train, df_test = base_data_prep(
+        env, use_sample_tickers_for_training, clean_sample_fdir
+    )
 
     # step 2: run experiments (tasks as sub-flow)
     for i, exp in enumerate(EXPS):
@@ -93,19 +106,27 @@ def stocks_forecasting_training_flow(
     register_best_model(only_latest=select_only_latest)
 
     # step 4: cleanup (task)
-    if not test_mode:
+    if env in ["dev", "prod"]:
         remove_raw_data(DATAPATH)
+        logger.info(f"Running in a primary env {env}, therefore removing raw data")
     else:
-        logger.info("Running in test mode, therefore not removing raw data")
+        # Not removing the raw data in non-primary envs to enable fast test runs
+        logger.info(
+            f"Running in a non-primary env {env}, therefore not removing raw data"
+        )
 
     logger.info("Worfklow finalized")
 
 
 # This is a subflow, calling other tasks
 @task(task_run_name="base_data_prep_taskgroup")
-def base_data_prep(use_sample_tickers_for_training: bool) -> tuple:
+def base_data_prep(
+    env: str,
+    use_sample_tickers_for_training: bool,
+    clean_sample_fdir: str | None = None,
+) -> tuple:
     # load the raw data
-    df_raw = load_raw_data(
+    df_raw, access_date_str = load_raw_data(
         datapath=DATAPATH,
         user="nelgiriyewithana",
         datasetname="world-stock-prices-daily-updating",
@@ -113,12 +134,14 @@ def base_data_prep(use_sample_tickers_for_training: bool) -> tuple:
     # clean the raw data (e.g. winsorize returns)
     df_clean = clean_raw_data(df_raw)
     # sample tickers and dates
-    df = sample_tickers_dates(
+    df, fpath = sample_tickers_dates(
         df_clean,
         tickers=SAMPLE_TICKERS if use_sample_tickers_for_training else None,
         startdate=datetime.datetime.now() - datetime.timedelta(days=365 * 5 + 1),
-        clean_sample_fpath_full=None,
+        clean_sample_fdir=clean_sample_fdir,
+        access_date_str=access_date_str,
     )
+    store_sampled_data_in_gcs(env, fpath)
     # Split train and test
     df_train, df_test = split_train_test_panel(df, train_ratio=0.8)
     return df, df_train, df_test
@@ -184,6 +207,21 @@ def run_single_experiment(
 
 
 @task(task_run_name="register_best_model")
+def store_sampled_data_in_gcs(env: str, fpath: str) -> None:
+    logger = get_run_logger()
+    config = Configs(env)
+    upload_file_to_folder(
+        project_id=config.cloud["gcs"]["project"],
+        bucket_name=config.cloud["gcs"]["data_monitoring_bucket"],
+        folder=f"cleaned_samples_{env}",
+        file=fpath,
+    )
+    logger.info(
+        f"Uploaded {fpath} to gs://{config.cloud['gcs']['data_monitoring_bucket']}/cleaned_samples_{env}"
+    )
+
+
+@task(task_run_name="register_best_model")
 def register_best_model(only_latest: bool = True) -> None:
     """Select best run by RMSE and register its model."""
     logger = get_run_logger()
@@ -221,5 +259,5 @@ def register_best_model(only_latest: bool = True) -> None:
 
 if __name__ == "__main__":
     stocks_forecasting_training_flow(
-        test_mode=True, use_sample_tickers_for_training=True, select_only_latest=True
+        env="dev", use_sample_tickers_for_training=True, select_only_latest=True
     )
