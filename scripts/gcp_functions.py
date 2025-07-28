@@ -1,5 +1,6 @@
 import io
 import os
+import pickle
 import subprocess
 
 import pandas as pd
@@ -18,6 +19,18 @@ def read_file_as_df(project_id: str, bucket_name: str, gcs_path: str) -> None:
     if extension == "parquet":
         df = pd.read_parquet(io.BytesIO(file_bytes))
     return df
+
+
+def load_pickle_from_gcs(project_id: str, bucket_name: str, gcs_path: str) -> None:
+    # Initialize client
+    client = storage.Client(project=project_id)
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(gcs_path)
+
+    # load from pickle
+    with blob.open(mode="rb") as f:
+        loaded_obj = pickle.load(f)
+    return loaded_obj
 
 
 def clear_gcs_folder(project_id: str, bucket_name: str, folder: str) -> None:
