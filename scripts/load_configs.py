@@ -4,7 +4,9 @@ import yaml
 
 
 class Configs:
-    def __init__(self, env: str, config_paths: dict | None = None) -> None:
+    def __init__(
+        self, env: str | None = None, config_paths: dict | None = None
+    ) -> None:
         rootpath = os.path.dirname(os.path.dirname(__file__))
         default_config_paths = {"gcs": os.path.join(rootpath, "config", "gcs.yml")}
         if config_paths is None:
@@ -20,7 +22,10 @@ class Configs:
         with open(cloud_fpath) as f:
             config_cloud = yaml.safe_load(f)
         cloud_shared = config_cloud["shared"]
-        cloud_env = config_cloud[env]
+        if env is not None:
+            cloud_env = config_cloud[env]
+        else:
+            cloud_env = {}
         return {**cloud_shared, **cloud_env}
 
 
