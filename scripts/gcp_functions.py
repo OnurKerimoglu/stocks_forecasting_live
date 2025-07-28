@@ -51,6 +51,19 @@ def upload_directory(
     print(f"Successfully uploaded {len(files)} file(s) to gs://{bucket.name}/{folder}")
 
 
+def upload_file_to_folder(
+    project_id: str, bucket_name: str, folder: str, file: str
+) -> None:
+    client = storage.Client(project=project_id)
+    bucket = client.bucket(bucket_name)
+    fname = os.path.basename(file)
+    # construct blob name with fname and prefix = folder
+    blob_name = f"{folder}/{fname}"
+    blob = bucket.blob(blob_name)
+    blob.upload_from_filename(file)
+    print(f"Uploaded {file} to gs://{bucket.name}/{folder}")
+
+
 def download_directory(
     project_id: str,
     bucket_name: str,
