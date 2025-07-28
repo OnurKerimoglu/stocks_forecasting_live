@@ -1,0 +1,17 @@
+# config file version
+apiVersion: 1
+
+# list of datasources to insert/update
+# available in the database
+datasources:
+  - name: PostgreSQL
+    type: postgres
+    access: proxy
+    url: db:5432
+    database: stocks
+    user: admin
+    secureJsonData:
+      password: 'admin'
+    jsonData:
+      sslmode: 'disable'
+      database: stocks
