@@ -1,7 +1,23 @@
+import io
 import os
 import subprocess
 
+import pandas as pd
 from google.cloud import storage
+
+
+def read_file_as_df(project_id: str, bucket_name: str, gcs_path: str) -> None:
+    # Initialize client
+    client = storage.Client(project=project_id)
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(gcs_path)
+
+    # Download to bytes and read
+    file_bytes = blob.download_as_bytes()
+    extension = gcs_path.split(".")[-1]
+    if extension == "parquet":
+        df = pd.read_parquet(io.BytesIO(file_bytes))
+    return df
 
 
 def clear_gcs_folder(project_id: str, bucket_name: str, folder: str) -> None:
