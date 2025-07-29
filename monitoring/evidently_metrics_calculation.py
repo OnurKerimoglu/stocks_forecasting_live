@@ -1,9 +1,8 @@
 import datetime
 import logging
-import os
 import random
-import sys
 import time
+import warnings
 
 import pandas as pd
 import psycopg
@@ -14,11 +13,15 @@ from data import (
     build_features,
     create_X_y_multistep,
 )
+from scripts.gcp_functions import (
+    load_json_from_gcs,
+    load_pickle_from_gcs,
+    read_file_as_df,
+)
+from scripts.load_configs import Configs
 
-rootpath = os.path.dirname(os.getcwd())
-sys.path.append(os.path.join(rootpath, "scripts"))
-sys.path.append(os.path.join(rootpath, "src"))
-
+warnings.simplefilter(action="ignore", category=FutureWarning)
+warnings.simplefilter(action="ignore", category=RuntimeWarning)
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s]: %(message)s"
 )
@@ -41,8 +44,6 @@ CONNECTION_STRING_DB = CONNECTION_STRING + " dbname=stocks"
 
 
 def load_ref_data_model_params(configs: dict, prefix: str = "ref_data_model") -> tuple:
-    from gcp_functions import load_json_from_gcs, load_pickle_from_gcs, read_file_as_df
-
     # Read ref_data, ref_params and ref_estimator from GCS
     ref_data = read_file_as_df(
         configs.cloud["gcs"]["project"],
@@ -64,8 +65,6 @@ def load_ref_data_model_params(configs: dict, prefix: str = "ref_data_model") ->
 
 
 def prepare_new_data(data_path: dict, params: dict, estimator: object) -> pd.DataFrame:
-    from gcp_functions import read_file_as_df
-
     df = read_file_as_df(
         data_path["project"],
         data_path["bucket"],
@@ -102,13 +101,10 @@ def calculate_metrics_postgresql(
     data_definition: DataDefinition,
     report: Report,
 ) -> None:
-    # begin is the last day available in data
-    begin = new_data.index.max().to_pydatetime()
-    current_data = new_data[
-        (new_data.index >= (begin - datetime.timedelta(i)))
-        & (new_data.index < (begin - datetime.timedelta(i - 1)))
-    ]
-
+    days_ago = i
+    current_date = new_data.index.unique()[-1 - days_ago]
+    logging.info(f"Processing: {current_date}")
+    current_data = new_data[new_data.index == current_date]
     current_dataset = Dataset.from_pandas(current_data, data_definition=data_definition)
     reference_dataset = Dataset.from_pandas(ref_data, data_definition=data_definition)
 
@@ -124,7 +120,7 @@ def calculate_metrics_postgresql(
             curr.execute(
                 "insert into evidently_metrics(timestamp, prediction_drift, num_drifted_columns, share_missing_values) values (%s, %s, %s, %s)",
                 (
-                    begin + datetime.timedelta(i),
+                    current_date,
                     prediction_drift,
                     num_drifted_columns,
                     share_missing_values,
@@ -133,8 +129,6 @@ def calculate_metrics_postgresql(
 
 
 def get_data(env: str, fname: str) -> tuple:
-    from load_configs import Configs
-
     configs = Configs(env)
     # load reference data
     ref_data, ref_params, ref_estimator = load_ref_data_model_params(
@@ -153,11 +147,11 @@ def get_data(env: str, fname: str) -> tuple:
     new_data = prepare_new_data(data_new_path, ref_params, ref_estimator)
 
     num_features = ref_data.columns.to_list()
-    categorical_columns = ["Ticker"]
-    for col in categorical_columns:
+    cat_features = ["Ticker"]
+    for col in cat_features:
         num_features.remove(col)
     data_definition = DataDefinition(
-        numerical_columns=num_features, categorical_columns=categorical_columns
+        numerical_columns=num_features, categorical_columns=cat_features
     )
 
     return new_data, ref_data, data_definition
@@ -186,7 +180,7 @@ def batch_monitoring_backfill(env: str, fname: str, backfill_horizon: int) -> No
             time.sleep(SEND_TIMEOUT - seconds_elapsed)
         while last_send < new_send:
             last_send = last_send + datetime.timedelta(seconds=10)
-        logging.info("data sent")
+        logging.info(f"Day: {i + 1}/{backfill_horizon}: data sent")
 
 
 if __name__ == "__main__":
