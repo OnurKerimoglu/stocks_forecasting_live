@@ -118,3 +118,16 @@ index
 ```
 
 `Make inference_test_pretty` will call the script for the current active branch for a default ticker.
+
+### Monitoring
+Monitoring is achieved through:
+1. Building and running the services (only once):
+    - issuing `docker compose -f monitoring/docker-compose.yml build` will build the docker images of all necessary services ([grafana](https://grafana.com/) as the dashboarding tool, a [postgres](https://www.postgresql.org/) DB and [adminer](https://www.adminer.org) as the DB management tool, see: [docker-compose.yml](monitoring/docker-compose.yaml))
+    - issuing `docker compose -f monitoring/docker-compose.yml up` will start running the services. With the default configuration (see [grafana_datasources.yaml](monitoring/config/grafana_datasources.yaml)), adminer should be accessible on localhost:8085 (with System: PostgreSQL, Username: postgres, Pw: admin, Database: stocks) and grafana should be accessible on localhost:3000 (with default user: admin and pw:admin).
+2. Data archival: every time the training pipeline is run, the date-sampled & cleaned data is stored in a GCS bucket defined in [gcs.yml](config/gcs.yml)
+3. Establishing the baseline: the notebook [establish_baseline_data_model.ipynb](monitoring/establish_baseline_data_model.ipynb) should be executed to define and store the model and data that formed the baseline, against which the subsequent datasets and models will be compared against. This is a manual step so far.
+4. Refreshing the dashboard: to compare a new dataset (e.g., a new pull from Kaggle) against the ref dataset, and predictions generated with the new dataset and the reference model, the script [evidently_dashboard.py](monitoring/evidently_dashboard.py) should be run with the necessary arguments. This is exemplified with a [Makefile](Makefile) target (issue: `make monitoring_refresh)
+    - localrun: whether the data should be pulled from local filesystem (to set it to False, provide no-localrun instead)
+    - env: in which env folder/prefix (i.e., sample_cleaned_{dev}) the new data is stored
+    - fname: file name of the new data (e.g., "Kaggle_Access_2025-07-28_WSPall_from_2020-07-28.parquet")
+    - backfill_horizon: number of (business) days the backfill should work (backwards from the last available date)
