@@ -1,3 +1,4 @@
+import argparse
 import datetime
 import logging
 import os
@@ -238,9 +239,30 @@ def batch_monitoring_backfill(
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--localrun", action="store_true")
+    parser.add_argument("--no-localrun", dest="localrun", action="store_false")
+    parser.add_argument(
+        "--env", type=str, required=True, help="env for the new data test, dev, prod"
+    )
+    parser.add_argument(
+        "--fname",
+        type=str,
+        required=True,
+        help="filename for the new data, e.g.: Kaggle_Access_2025-07-28_WSPall_from_2020-07-28.parquet",
+    )
+    parser.add_argument("--backfill_horizon", type=int, required=False, default=20)
+    parser.set_defaults(feature=True)
+    args = parser.parse_args()
+    # batch_monitoring_backfill(
+    #     localrun=True,
+    #     env="dev",
+    #     fname="Kaggle_Access_2025-07-28_WSPall_from_2020-07-28.parquet",
+    #     backfill_horizon=20,
+    # )
     batch_monitoring_backfill(
-        localrun=True,
-        env="dev",
-        fname="Kaggle_Access_2025-07-28_WSPall_from_2020-07-28.parquet",
-        backfill_horizon=20,
+        localrun=args.localrun,
+        env=args.env,
+        fname=args.fname,
+        backfill_horizon=args.backfill_horizon,
     )
