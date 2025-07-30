@@ -88,3 +88,7 @@ inference_test_raw:
 
 inference_test_pretty:
 	python scripts/test_inference.py --env ${BRANCH_SIMPLE} --ticker GOOG
+
+monitoring_refresh:
+	@fname="Kaggle_Access_2025-07-28_WSPall_from_2020-07-28.parquet"
+	python monitoring/refresh_monitoring_dashboard.py --no-localrun --env dev --fname ${fname} --backfill_horizon 20
