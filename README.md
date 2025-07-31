@@ -128,7 +128,7 @@ Monitoring is achieved through:
 3. Establishing the baseline: the notebook [establish_baseline_data_model.ipynb](monitoring/establish_baseline_data_model.ipynb) should be executed to define and store the model and data that formed the baseline, against which the subsequent datasets and models will be compared against. This is a manual step so far.
 4. Refreshing the dashboard: to compare a new dataset (e.g., a new pull from Kaggle) against the ref dataset, and predictions generated with the new dataset and the reference model, the script [evidently_dashboard.py](monitoring/evidently_dashboard.py) should be run with the necessary arguments. This is exemplified with a [Makefile](Makefile) target `monitoring_base_refresh` (If you don't have the data with the filename on your system, it won't work)
     - localrun: whether the data should be pulled from local filesystem (to set it to False, provide no-localrun instead)
-    - env: in which env folder/prefix (i.e., sample_cleaned_{dev}) the new data is stored
+    - env: in which env folder/prefix (i.e., cleaned_samples_dev) the new data is stored
     - fname: file name of the new data (e.g., "Kaggle_Access_2025-07-28_WSPall_from_2020-07-28.parquet")
     - backfill_horizon: number of (business) days (backwards from the last available date) monitoring dashboard should be refreshed for
 5. Inspection of results: in Grafana -> Dashboards -> a dashboard named 'Base Monitoring' (sourced from [base_monitoring.json](monitoring/dashboards/base_monitoring.json))  will be available, that should look like:

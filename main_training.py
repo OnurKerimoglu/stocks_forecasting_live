@@ -88,7 +88,7 @@ def stocks_forecasting_training_flow(
                 f"As running in a primary env {env}, use_sample_tickers_for_training is set to False"
             )
             use_sample_tickers_for_training = False
-    clean_sample_fdir = os.path.join(DATAPATH, f"sample_cleaned_samples_{env}")
+    clean_sample_fdir = os.path.join(DATAPATH, f"cleaned_samples_{env}")
     df, df_train, df_test = base_data_prep(
         env, use_sample_tickers_for_training, clean_sample_fdir
     )
