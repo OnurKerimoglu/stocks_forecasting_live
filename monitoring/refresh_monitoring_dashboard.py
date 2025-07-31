@@ -5,23 +5,13 @@ import os
 import random
 import time
 import warnings
-from json import load as jload
-from pickle import load as pload
 
 import pandas as pd
 import psycopg
 from evidently import DataDefinition, Dataset, Report
 from evidently.metrics import DriftedColumnsCount, MissingValueCount, ValueDrift
+from tools import load_data, load_model_artifacts, prepare_data_for_monitoring
 
-from data import (
-    build_features,
-    create_X_y_multistep,
-)
-from scripts.gcp_functions import (
-    load_json_from_gcs,
-    load_pickle_from_gcs,
-    read_file_as_df,
-)
 from scripts.load_configs import Configs
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
@@ -48,96 +38,6 @@ create table evidently_metrics(
 
 CONNECTION_STRING = "host=localhost port=5432 user=postgres password=admin"
 CONNECTION_STRING_DB = CONNECTION_STRING + " dbname=stocks"
-
-
-def load_ref_data_model_params(
-    configs: dict | None = None, prefix: str = "ref_data_model"
-) -> tuple:
-    if configs is not None:
-        bucket = configs.cloud["gcs"]["data_monitoring_bucket"]
-        logging.info(f"Loading ref data, model and params from GCS bucket: {bucket}")
-        # Read ref_data, ref_params and ref_estimator from GCS
-        ref_data = read_file_as_df(
-            configs.cloud["gcs"]["project"],
-            configs.cloud["gcs"]["data_monitoring_bucket"],
-            f"{prefix}/data.parquet",
-        )
-        ref_params = load_json_from_gcs(
-            configs.cloud["gcs"]["project"],
-            configs.cloud["gcs"]["data_monitoring_bucket"],
-            f"{prefix}/params.json",
-        )
-        ref_estimator = load_pickle_from_gcs(
-            configs.cloud["gcs"]["project"],
-            configs.cloud["gcs"]["data_monitoring_bucket"],
-            f"{prefix}/model.pkl",
-        )
-    else:
-        # Read from the local filesystem
-        ref_path = os.path.join(ROOTPATH, prefix)
-        if not os.path.exists(ref_path):
-            raise Exception(
-                f"no config provided for GCS and local path {ref_path} does not exist"
-            )
-        else:
-            fpath = os.path.join(ref_path, "data.parquet")
-            ref_data = pd.read_parquet(fpath)
-            logging.info(f"Loading new data from filesystem: {fpath}")
-            with open(os.path.join(ref_path, "params.json")) as f:
-                ref_params = jload(f)
-            with open(os.path.join(ref_path, "model.pkl"), "rb") as f:
-                ref_estimator = pload(f)
-    # Convert the multi-index df to single-index
-    ref_data_flat = ref_data.reset_index(level="Ticker")
-    return ref_data_flat, ref_params, ref_estimator
-
-
-def load_new_data(configs: dict, env: str, fname: str) -> pd.DataFrame:
-    if configs is not None:
-        # Load the df from GCS
-        data_path = {
-            "project": configs.cloud["gcs"]["project"],
-            "bucket": configs.cloud["gcs"]["data_monitoring_bucket"],
-            "prefix": f"cleaned_samples_{env}",
-            "fname": fname,
-        }
-        bucket = data_path["bucket"]
-        logging.info(f"Loading new data from GCS bucket: {bucket}")
-        df = read_file_as_df(
-            data_path["project"],
-            data_path["bucket"],
-            data_path["prefix"] + "/" + data_path["fname"],
-        )
-    else:
-        # Read from the local filesystem
-        fpath = os.path.join(DATAPATH, f"sample_cleaned_samples_{env}", fname)
-        logging.info(f"Loading new data from filesystem: {fpath}")
-        if not os.path.exists(fpath):
-            raise Exception(
-                f"no config provided for GCS and local path {fpath} does not exist"
-            )
-        else:
-            df = pd.read_parquet(fpath)
-    return df
-
-
-def prepare_new_data(
-    configs: dict, env: str, fname: str, params: dict, estimator: object
-) -> pd.DataFrame:
-    # load the df
-    df = load_new_data(configs, env, fname)
-    TARGET = "returns"
-    df_feats, _features2scale = build_features(
-        df, lags=int(params["lags"]), split="train", CldrFeats=params["CldrFeats"]
-    )
-    X, y = create_X_y_multistep(df_feats, steps=int(params["steps"]), target=TARGET)
-    y_hat = estimator.predict(X)
-    data = X.copy()
-    data["target"] = y["y_step_1"]
-    data["prediction"] = y_hat[:, 0]
-    # Convert multi-index df to single index
-    data_flat = data.reset_index(level="Ticker")
-    return data_flat
 
 
 def prep_db() -> None:
@@ -192,12 +92,29 @@ def get_data(localrun: bool, env: str, fname: str) -> tuple:
     else:
         configs = Configs(env)
     # load reference data
-    ref_data, ref_params, ref_estimator = load_ref_data_model_params(
-        configs, "ref_data_model"
+    ref_data = load_data(
+        localrun,
+        prefix="ref_data_model",
+        fname="data.parquet",
+        project=configs.cloud["gcs"]["project"] if configs else None,
+        bucket=configs.cloud["gcs"]["data_monitoring_bucket"] if configs else None,
+        localrootdir=DATAPATH,
+    )
+    # Convert the multi-index df to single-index
+    ref_data = ref_data.reset_index(level="Ticker")
+
+    ref_params, ref_estimator = load_model_artifacts(
+        localrun,
+        prefix="ref_data_model",
+        project=configs.cloud["gcs"]["project"] if configs else None,
+        bucket=configs.cloud["gcs"]["data_monitoring_bucket"] if configs else None,
+        localrootdir=DATAPATH,
     )
 
     # Use the ref params and estimator to prepare new data
-    new_data = prepare_new_data(configs, env, fname, ref_params, ref_estimator)
+    new_data = prepare_data_for_monitoring(
+        configs, env, fname, ref_params, ref_estimator, localrootdir=DATAPATH
+    )
 
     num_features = ref_data.columns.to_list()
     cat_features = ["Ticker"]
@@ -243,12 +160,12 @@ if __name__ == "__main__":
     parser.add_argument("--localrun", action="store_true")
     parser.add_argument("--no-localrun", dest="localrun", action="store_false")
     parser.add_argument(
-        "--env", type=str, required=True, help="env for the new data test, dev, prod"
+        "--env", type=str, required=False, help="env for the new data test, dev, prod"
     )
     parser.add_argument(
         "--fname",
         type=str,
-        required=True,
+        required=False,
         help="filename for the new data, e.g.: Kaggle_Access_2025-07-28_WSPall_from_2020-07-28.parquet",
     )
     parser.add_argument("--backfill_horizon", type=int, required=False, default=20)
