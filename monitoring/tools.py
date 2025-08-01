@@ -99,7 +99,7 @@ def prepare_data_for_monitoring(
     TARGET = "returns"
     logger.info("Creating data with features, target and predictions")
     df_feats, _features2scale = build_features(
-        df, lags=int(params["lags"]), split="train", CldrFeats=params["CldrFeats"]
+        df, lags=int(params["lags"]), CldrFeats=params["CldrFeats"]
     )
     X, y = create_X_y_multistep(df_feats, steps=int(params["steps"]), target=TARGET)
     y_hat = estimator.predict(X)

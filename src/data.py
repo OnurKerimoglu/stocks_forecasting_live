@@ -242,7 +242,7 @@ def split_train_test_panel(
 
 
 def build_features(
-    df_in: pd.DataFrame, lags: int = 3, split: str | None = None, CldrFeats: bool = True
+    df_in: pd.DataFrame, lags: int = 3, CldrFeats: bool = True
 ) -> tuple[pd.DataFrame, list[str]]:
     """
     Builds features for a given panel dataframe.
