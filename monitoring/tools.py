@@ -82,6 +82,7 @@ def prepare_data_for_monitoring(
     configs: dict,
     env: str,
     fname: str,
+    target: str,
     params: dict,
     estimator: object,
     localrootdir: str | None = None,
@@ -96,12 +97,11 @@ def prepare_data_for_monitoring(
         bucket=configs.cloud["gcs"]["data_monitoring_bucket"] if configs else None,
         localrootdir=localrootdir,
     )
-    TARGET = "returns"
     logger.info("Creating data with features, target and predictions")
     df_feats, _features2scale = build_features(
         df, lags=int(params["lags"]), CldrFeats=params["CldrFeats"]
     )
-    X, y = create_X_y_multistep(df_feats, steps=int(params["steps"]), target=TARGET)
+    X, y = create_X_y_multistep(df_feats, steps=int(params["steps"]), target=target)
     y_hat = estimator.predict(X)
     data = X.copy()
     data["target"] = y["y_step_1"]
