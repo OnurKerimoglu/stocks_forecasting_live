@@ -16,7 +16,7 @@ REGISTRY_NAME = "stocks_forecasting_candidates"  # The registry from which the m
 MODEL_ALIAS = "champion"
 
 rootpath = os.path.dirname(os.path.dirname(__file__))
-LOCALPATH = os.path.join(rootpath, "extracted_model")
+LOCALPATH = os.path.join(rootpath, "data", "extracted_model")
 
 
 def main_extract_model(env: str, cloudupload: bool = True) -> None:
