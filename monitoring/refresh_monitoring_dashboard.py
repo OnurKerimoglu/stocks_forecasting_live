@@ -21,6 +21,7 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s]: %(message)s"
 )
 
+TARGET = "returns"
 ROOTPATH = os.path.dirname(os.path.dirname(__file__))
 DATAPATH = os.path.join(ROOTPATH, "data")
 SEND_TIMEOUT = 10
@@ -111,7 +112,7 @@ def get_data(localrun: bool, env: str, fname: str) -> tuple:
 
     # Use the ref params and estimator to prepare new data
     new_data = prepare_data_for_monitoring(
-        configs, env, fname, ref_params, ref_estimator, localrootdir=DATAPATH
+        configs, env, fname, TARGET, ref_params, ref_estimator, localrootdir=DATAPATH
     )
 
     num_features = ref_data.columns.to_list()
