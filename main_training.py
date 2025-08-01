@@ -167,10 +167,10 @@ def run_single_experiment(
         # Training: prepare data
         CldrFeats = exp["CldrFeats"] if "CldrFeats" in exp.keys() else True
         df_train_feats, _features2scale = build_features(
-            df_train, lags=STATIC_PARS["lags"], split="train", CldrFeats=CldrFeats
+            df_train, lags=STATIC_PARS["lags"], CldrFeats=CldrFeats
         )
         df_test_feats, _features2scale = build_features(
-            df_test, lags=STATIC_PARS["lags"], split="test", CldrFeats=CldrFeats
+            df_test, lags=STATIC_PARS["lags"], CldrFeats=CldrFeats
         )
         X_train, y_train = create_X_y_multistep(
             df_train_feats, steps=STATIC_PARS["steps"], target=TARGET
