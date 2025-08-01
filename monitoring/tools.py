@@ -15,6 +15,11 @@ from scripts.gcp_functions import (
     read_file_as_df,
 )
 
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s]: %(message)s"
+)
+
 
 def load_model_artifacts(
     localrun: bool, prefix: str, project: str, bucket: str, localrootdir: str
@@ -40,7 +45,7 @@ def load_model_artifacts(
                 f"no config provided for GCS and local path {ref_path} does not exist"
             )
         else:
-            logging.info(f"Loading model artifacts from filesystem: {ref_path}")
+            logger.info(f"Loading model artifacts from filesystem: {ref_path}")
             with open(os.path.join(ref_path, "params.json")) as f:
                 ref_params = jload(f)
             with open(os.path.join(ref_path, "model.pkl"), "rb") as f:
@@ -58,12 +63,12 @@ def load_data(
 ) -> pd.DataFrame:
     if not localrun:
         # Load the df from GCS
-        logging.info(f"Loading new data from GCS bucket: {bucket}")
+        logger.info(f"Loading data from GCS bucket: {bucket}")
         df = read_file_as_df(project, bucket, f"{prefix}/{fname}")
     else:
         # Read from the local filesystem
         fpath = os.path.join(localrootdir, prefix, fname)
-        logging.info(f"Loading new data from filesystem: {fpath}")
+        logger.info(f"Loading data from filesystem: {fpath}")
         if not os.path.exists(fpath):
             raise Exception(
                 f"no config provided for GCS and local path {fpath} does not exist"
@@ -92,6 +97,7 @@ def prepare_data_for_monitoring(
         localrootdir=localrootdir,
     )
     TARGET = "returns"
+    logger.info("Creating data with features, target and predictions")
     df_feats, _features2scale = build_features(
         df, lags=int(params["lags"]), split="train", CldrFeats=params["CldrFeats"]
     )
