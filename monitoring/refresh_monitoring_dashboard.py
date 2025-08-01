@@ -99,8 +99,6 @@ def get_data(localrun: bool, env: str, fname: str) -> tuple:
         bucket=configs.cloud["gcs"]["data_monitoring_bucket"] if configs else None,
         localrootdir=DATAPATH,
     )
-    # Convert the multi-index df to single-index
-    ref_data = ref_data.reset_index(level="Ticker")
 
     ref_params, ref_estimator = load_model_artifacts(
         localrun,
