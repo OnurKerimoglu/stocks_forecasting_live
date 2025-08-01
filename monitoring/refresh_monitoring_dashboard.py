@@ -16,6 +16,7 @@ from scripts.load_configs import Configs
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
 warnings.simplefilter(action="ignore", category=RuntimeWarning)
+logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s]: %(message)s"
 )
@@ -60,7 +61,7 @@ def calculate_metrics_postgresql(
 ) -> None:
     days_ago = i
     current_date = new_data.index.unique()[-1 - days_ago]
-    logging.info(f"Processing: {current_date}")
+    logger.info(f"Processing: {current_date}")
     current_data = new_data[new_data.index == current_date]
     current_dataset = Dataset.from_pandas(current_data, data_definition=data_definition)
     reference_dataset = Dataset.from_pandas(ref_data, data_definition=data_definition)
@@ -87,10 +88,7 @@ def calculate_metrics_postgresql(
 
 
 def get_data(localrun: bool, env: str, fname: str) -> tuple:
-    if localrun:
-        configs = None
-    else:
-        configs = Configs(env)
+    configs = None if localrun else Configs(env)
     # load reference data
     ref_data = load_data(
         localrun,
@@ -152,7 +150,7 @@ def batch_monitoring_backfill(
             time.sleep(SEND_TIMEOUT - seconds_elapsed)
         while last_send < new_send:
             last_send = last_send + datetime.timedelta(seconds=10)
-        logging.info(f"Day: {i + 1}/{backfill_horizon}: data sent")
+        logger.info(f"Day: {i + 1}/{backfill_horizon}: data sent")
 
 
 if __name__ == "__main__":
