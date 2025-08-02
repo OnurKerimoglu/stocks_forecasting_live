@@ -4,6 +4,30 @@
 # Stocks Forecasting
 
 ## Motivation and Objectives
+Investing in the stock market requires insights into the target tickers -and ideally a view on where prices are headed. While long-term price movements are driven by fundamentals such as a company’s financial health and sector conditions, short-term behaviour is often swayed by recent price action and traders’ reactions. That short-term signal may be partially predictable, and this project is one such attempt.
+
+My priority has not been to craft *the* perfect model so far, but to build an end-to-end, fully automated infrastucture - from training to live inference - using industry-standard MLOps tools and practices. The system should:
+
+- **Expose an inference endpoint** that forecasts 5-day (multi-step) returns for any stock ticker, even those unseen at training time (a global model).
+- **Support rapid experimentation** with new features and model algorithms, while registering full model lineages.
+- **Monitor data and model performance** continuously and identify potential drifts.
+- **Enable managing cloud resources with IaC** so the entire stack can be spun up—or torn down—in one command.
+
+## Tech stack at a glance
+
+| Purpose | Tooling |
+|---------|---------|
+| Infrastructure as Code | **Terraform** |
+| Experiment tracking & model registry | **MLflow** |
+| Store & version models / training artifacts | **Google Cloud Storage (GCS)** |
+| Orchestrate and schedule workflows | **Prefect** |
+| Expose REST API | **Flask** |
+| Containerization and image storage | **Docker** + **Artifact Registry** |
+| Autoscale & deploy | **Cloud Run** |
+| Data & model monitoring | **Grafana + Evidently AI** |
+| Code quality | **Ruff** (lint/format) + **Pytest** (unit tests) |
+| CI/CD | **GitHub Actions** |
+
 
 ## Instructions for Reproduction
 ### Prerequisites and Initial Setup
