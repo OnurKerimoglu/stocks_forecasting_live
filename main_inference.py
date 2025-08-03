@@ -26,22 +26,25 @@ REGISTRY_NAME = "stocks_forecasting_candidates"  # The registry from which the m
 MODEL_ALIAS = "champion"
 
 rootpath = os.path.dirname(__file__)
-DEPLOYPATH = os.path.join(rootpath, "deployment")
+MODELPATH = os.path.join(rootpath, "data", "extracted_model")
 
 logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s]: %(message)s"
+)
 
 
 def stocks_forecasting_inference_flow(
-    ticker: str = "AAPL", use_model_registry: bool = False
+    ticker: str = "AAPL", use_model_registry: bool = False, past_horizon: int = 1
 ) -> None:
     if use_model_registry:
         model, params = retrieve_registered_model()
     else:
         model, params = retrieve_locally_stored_model()
     df_init = retrieve_ticker_data(ticker)
-    last_day, forecast = run_forecast(model, params, df_init)
-    logger.info(f"\nlast day:\n{last_day}\nforecast:\n{forecast}")
-    return last_day, forecast
+    past, forecast = run_forecast(model, params, df_init, past_horizon=past_horizon)
+    logger.info(f"\npast:\n{past}\nforecast:\n{forecast}")
+    return past, forecast
 
 
 def retrieve_registered_model() -> tuple:
@@ -57,11 +60,11 @@ def retrieve_registered_model() -> tuple:
 
 
 def retrieve_locally_stored_model() -> tuple:
-    fpath = os.path.join(DEPLOYPATH, "model.pkl")
+    fpath = os.path.join(MODELPATH, "model.pkl")
     logger.info(f"Loading model from: {fpath}")
     with open(fpath, "rb") as f:
         model = pickle.load(f)
-    fpath = os.path.join(DEPLOYPATH, "params.json")
+    fpath = os.path.join(MODELPATH, "params.json")
     logger.info(f"Loading params from: {fpath}")
     with open(fpath) as f:
         params = json.load(f)
@@ -94,6 +97,7 @@ def fetch_ticker_data_from_yf(ticker: str) -> pd.DataFrame:
 
     # Get rid of the redundant Ticker index
     df.columns = df.columns.droplevel("Ticker")
+    df.columns.name = None
     # Re-introduce the ticker as a regular column
     df["Ticker"] = ticker
     # Make 'Date' a regular column by resetting the index
@@ -111,6 +115,7 @@ def run_forecast(
     parameters: dict,
     df_init: pd.DataFrame,
     bizday_offset: bool = True,
+    past_horizon: int = 1,
 ) -> tuple:
     # Build features on your last observed history
     CldrFeats = parameters["CldrFeats"] if "CldrFeats" in parameters.keys() else True
@@ -139,25 +144,27 @@ def run_forecast(
     dates = [timestamp.date() for timestamp in dates_ts]
     last_return = y_train.iloc[-1].values[0]
     returns = np.append(last_return, y_hat)
-    returns_series = pd.Series(returns, index=dates, name="returns")
+    returns_series = pd.Series(returns, index=dates, name="Returns")
 
     # Compute prices from returns
     # Start from last observed close
-    last_close = df_init.loc[df_init["Date"] == last_date, "Close"].iloc[0]
-    prices = [last_close]
-    price_prev = last_close
+    ind = 0 - past_horizon
+    past_prices = df_init[["Date", "Close"]].iloc[ind:]
+    past_prices.set_index("Date", inplace=True)
+    past_prices.index.name = None
+    price_prev = past_prices.iloc[-1].values[0]
+    new_prices = [price_prev]
     for returns in y_hat:
         price_next = price_prev * (1 + returns)
-        prices.append(price_next)
+        new_prices.append(price_next)
         price_prev = price_next
 
-    prices_series = pd.Series(prices, index=dates, name="close")
+    prices_series = pd.Series(new_prices, index=dates, name="Close")
 
-    result = pd.concat([returns_series, prices_series], axis=1)
+    forecast = pd.concat([returns_series, prices_series], axis=1)
 
-    last = result.iloc[[0], :]
-    forecast = result.iloc[1:, :]
-    return last, forecast
+    forecast = forecast.iloc[1:, :]  # exclue the 0th day (included in the past prices)
+    return past_prices, forecast
 
 
 app = Flask("stocks-forecasting")
@@ -167,22 +174,25 @@ app = Flask("stocks-forecasting")
 def predict_endpoint() -> dict:
     request_json = request.get_json()
     ticker = request_json["ticker"]
+    past_horizon = request_json["past_horizon"]
     print(f"forecasting for: {ticker}")
-    last_day, forecast = stocks_forecasting_inference_flow(
-        ticker, use_model_registry=False
+    past, forecast = stocks_forecasting_inference_flow(
+        ticker, use_model_registry=False, past_horizon=past_horizon
     )
     # make Date a column instead of the index
-    ld = last_day.reset_index()
+    ld = past.reset_index()
     fc = forecast.reset_index()
 
     # turn each row into its own dict of { col: value, … }
     result = {
-        "last_day": ld.to_dict(orient="records"),
+        "past": ld.to_dict(orient="records"),
         "forecast": fc.to_dict(orient="records"),
     }
     return jsonify(result)
 
 
 # if __name__ == "__main__":
-# stocks_forecasting_inference_flow(ticker="AAPL", use_model_registry=False)
-# app.run(debug=True, host="0.0.0.0", port=9696)
+#     stocks_forecasting_inference_flow(
+#         ticker="AAPL", use_model_registry=False, past_horizon=10
+#     )
+app.run(debug=True, host="0.0.0.0", port=9696)

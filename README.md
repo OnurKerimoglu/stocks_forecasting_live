@@ -122,23 +122,24 @@ Any successful merge to the `prod` branch will trigger the CD workflow (see [.gi
 
 
 ### Testing the Deployments
-Besides the `inference_test_raw` Makefile target explained under the [Manual Deployment to Cloud Run](#manual-deployment-to-cloud-run), the helper function [test_inference.py](scripts/test_inference.py) can be used to test deployments. The script can make use of local deployments or remote (cloud run) deployments simply through the parameter `env`: while `prod`, `test` and `dev` will use the service url of the respective cloud run deployment, `local` will use the service url of a local deployment, hence requires serving of a local image (see [Local Build and Deployment](#local-build-and-deployment) section above).
+Besides the `inference_test_raw` Makefile target explained under the [Manual Deployment to Cloud Run](#manual-deployment-to-cloud-run), the helper function [test_inference.py](scripts/test_inference.py) can be used to test deployments. The script can make use of local deployments or remote (cloud run) deployments through the parameter `env`: while `prod`, `test` and `dev` will use the service url of the respective cloud run deployment, `local` will use the service url of a local deployment, hence requires serving of a local image (see [Local Build and Deployment](#local-build-and-deployment) section above). The script accepts two additonal arguments: `ticker`, the ticker symbol to be forecasted, and `past_horizon`, number of past days to be returned (1 implies the last day available, which is also the forecast origin).
 
-Example: assuming that a deployment has been made from a non-primary (anything other than `dev` or `prod`) branch (see [Manyal Deployment to Cloud Run ](#manual-deployment-to-cloud-run)), so that a `test` cloud run service is available, the example function call: `python scripts/test_inference.py --env test --ticker GOOG` will send a request for the ticker=GOOG to the stable url of the test service, parse the output and return something like:
-```
-=== LAST DAY ===
-             close returns (%)
-index
-2025-07-24  194.69       1.66%
+Example: assuming that a deployment has been made from a non-primary (anything other than `dev` or `prod`) branch (see [Manual Deployment to Cloud Run ](#manual-deployment-to-cloud-run)), so that a `test` cloud run service is available, the example function call: `python scripts/test_inference.py --env test --ticker GOOG --past_horizon 5` will send a request for the ticker=GOOG to the stable url of the test service, parse the output and return something like:
+```=== PAST PRICES ===
+             Close
+2025-07-28  232.79
+2025-07-29  231.01
+2025-07-30  230.19
+2025-07-31  234.11
+2025-08-01  214.75
 
 === FORECAST ===
-             close returns (%)
-index
-2025-07-25  195.61       0.47%
-2025-07-28  195.55      -0.03%
-2025-07-29  194.63      -0.48%
-2025-07-30  195.33       0.36%
-2025-07-31  193.93      -0.72%
+             Close Returns (%)
+2025-08-04  216.09       0.63%
+2025-08-05  216.50       0.19%
+2025-08-06  216.60       0.05%
+2025-08-07  217.86       0.58%
+2025-08-08  218.27       0.19%
 ```
 
 `Make inference_test_pretty` will call the script for the current active branch for a default ticker.
