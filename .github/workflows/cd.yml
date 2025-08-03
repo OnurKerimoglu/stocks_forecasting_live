@@ -79,7 +79,7 @@ jobs:
       - name: Build the image
         run: |
           echo "Building image_uri:tag ${{ steps.vars.outputs.image_uri }}"
-          docker build -f Docker/Dockerfile -t ${{ steps.vars.outputs.image_uri }} .
+          docker build -f deploy_inference/Dockerfile -t ${{ steps.vars.outputs.image_uri }} .
 
       - name: Configure Docker to use GAR
         run: |
