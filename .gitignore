@@ -210,9 +210,6 @@ __marimo__/
 .streamlit/secrets.toml
 
 data/
-ref_data_model
-extracted_model/
-deployment/
 
 mlflow.db
 artifacts/
