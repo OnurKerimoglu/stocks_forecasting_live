@@ -51,7 +51,7 @@ inference_build_local: quality_checks tests
 	  echo "You have uncommitted changes in the repo. Please commit or stash them."; \
 	else \
 	  echo "Branch is clean, building…"; \
-	  docker build -f Docker/Dockerfile -t ${IMAGE_URI} .; \
+	  docker build -f deploy_inference/Dockerfile -t ${IMAGE_URI} .; \
 	fi
 
 inference_serve_local:

@@ -5,8 +5,8 @@ FROM python:3.11.13-slim
 WORKDIR /app
 
 # Copy project metadata and source files for editable install
-COPY Docker/setup.py ./
-COPY Docker/inference_requirements.txt ./requirements.txt
+COPY deploy_inference/setup.py ./
+COPY deploy_inference/inference_requirements.txt ./requirements.txt
 COPY src/__init__.py ../src/data.py ./src/
 # Install the project in editable mode
 RUN pip install -r requirements.txt -e .
