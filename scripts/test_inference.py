@@ -4,32 +4,36 @@ from gcp_functions import get_gcrun_service_url
 from load_configs import Configs
 
 
-def main(env: str, ticker: str) -> None:
+def main(env: str, ticker: str, past_horizon: int) -> None:
     # Find the correct URL for the specified environment
     url = find_url_for_env(env)
 
     # Send the request
-    resp = requests.post(url, json={"ticker": ticker}).json()
+    pl_in = {"ticker": ticker, "past_horizon": past_horizon}
+    resp = requests.post(url, json=pl_in)
+    pl_out = resp.json()
 
     # Build DataFrames
-    last_day_df = pd.DataFrame.from_records(resp["last_day"])
-    forecast_df = pd.DataFrame.from_records(resp["forecast"])
+    past_df = pd.DataFrame.from_records(pl_out["past"])
+    forecast_df = pd.DataFrame.from_records(pl_out["forecast"])
 
     # Parse dates, set index, and convert returns → percent strings
-    for df in (last_day_df, forecast_df):
+    for df in (past_df, forecast_df):
         # turn the index field back into a datetime index
         df["index"] = pd.to_datetime(df["index"], format="%a, %d %b %Y %H:%M:%S GMT")
         df.set_index("index", inplace=True)
+        df.index.name = None
 
         # convert returns to percent, round to 2 decimal places, and append “%”
-        df["returns (%)"] = df["returns"].mul(100).round(2).map(lambda x: f"{x}%")
-        df.drop(columns="returns", inplace=True)
+        if "Returns" in df.columns:
+            df["Returns (%)"] = df["Returns"].mul(100).round(2).map(lambda x: f"{x}%")
+            df.drop(columns="Returns", inplace=True)
 
     # Print with nicer formatting
-    print("\n=== LAST DAY ===")
-    print(last_day_df.round({"close": 2, "returns": 6}))
+    print("\n=== PAST PRICES ===")
+    print(past_df.round({"Close": 2}))
     print("\n=== FORECAST ===")
-    print(forecast_df.round({"close": 2, "returns": 6}))
+    print(forecast_df.round({"Close": 2, "Returns": 6}))
 
 
 def find_url_for_env(env: str) -> str:
@@ -76,6 +80,13 @@ if __name__ == "__main__":
         help="deployed environment. Options: local, test, dev, prod",
         default="local",
     )
+    parser.add_argument(
+        "--past_horizon",
+        type=int,
+        required=False,
+        help="number (days) of past prices should be returned",
+        default=0,
+    )
     args = parser.parse_args()
 
-    main(env=args.env, ticker=args.ticker)
+    main(env=args.env, ticker=args.ticker, past_horizon=args.past_horizon)

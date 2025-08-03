@@ -84,10 +84,10 @@ inference_test_raw:
 	echo "Service URL of the deployment is: $$SERVICE_URL" && \
 	curl -X POST "$$SERVICE_URL/forecast" \
 	  -H "Content-Type: application/json" \
-	  -d '{"ticker":"GOOG"}'
+	  -d '{"ticker":"GOOG", "past_horizon": 5}'
 
 inference_test_pretty:
-	python scripts/test_inference.py --env ${BRANCH_SIMPLE} --ticker GOOG
+	python scripts/test_inference.py --env ${BRANCH_SIMPLE} --ticker GOOG --past_horizon 5
 
 FNAME_NEW="Kaggle_Access_2025-07-22_WSPall_from_2020-07-22.parquet"
 ENV_NEW="prod"
