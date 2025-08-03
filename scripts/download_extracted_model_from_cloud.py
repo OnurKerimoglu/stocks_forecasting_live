@@ -7,7 +7,8 @@ from load_configs import Configs
 
 def download_extracted_model_from_gcs(env: str, refresh: bool = True) -> None:
     rootpath = os.path.dirname(os.path.dirname(__file__))
-    local_dir = os.path.join(rootpath, "extracted_model")
+    datapath = os.path.join(rootpath, "data")
+    local_dir = os.path.join(datapath, "extracted_model")
     config_cloud = Configs(env).cloud
     download_directory(
         project_id=config_cloud["gcs"]["project"],
