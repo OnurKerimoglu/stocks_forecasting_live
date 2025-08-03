@@ -27,6 +27,11 @@ def build_chart(data: dict, ticker: str) -> go.Figure:
     # Convert to DataFrame & ensure datetime index
     past_df = pd.DataFrame(data["past"]).rename(columns={"index": "Date"})
     fcst_df = pd.DataFrame(data["forecast"]).rename(columns={"index": "Date"})
+    # add the last day of past_df to fcst_df
+    fcst_df = pd.concat([past_df.iloc[-1:], fcst_df])
+
+    # past_df.set_index("Date", inplace=True)
+    # fcst_df.set_index("Date", inplace=True)
 
     past_df["Date"] = pd.to_datetime(past_df["Date"])  # parses the RFC date string
     fcst_df["Date"] = pd.to_datetime(fcst_df["Date"])
@@ -40,7 +45,8 @@ def build_chart(data: dict, ticker: str) -> go.Figure:
             y=past_df["Close"],
             mode="lines+markers",
             name="Past Close",
-            line=dict(width=2),
+            line=dict(width=2, color="blue"),
+            marker=dict(size=9, symbol="circle", color="blue"),
         )
     )
 
@@ -50,21 +56,38 @@ def build_chart(data: dict, ticker: str) -> go.Figure:
             y=fcst_df["Close"],
             mode="lines+markers",
             name="Forecast Close",
-            line=dict(width=2, dash="dash"),
+            line=dict(width=2, dash="dash", color="red"),
+            marker=dict(size=9, symbol="circle", color="red"),
+        )
+    )
+
+    # forecast origin marker
+    fig.add_trace(
+        go.Scatter(
+            x=[fcst_df["Date"].iloc[0]],
+            y=[fcst_df["Close"].iloc[0]],
+            mode="markers",
+            marker=dict(size=11, symbol="diamond", color="violet"),
+            name="Forecast origin",
         )
     )
 
     # Adaptive X-axis formatting depending on total horizon
-    total_points = len(past_df) + len(fcst_df)
-    if total_points <= 15:
-        tickformat = "%b %d"  # "Aug 04"
-        dtick = None
-    elif total_points <= 35:
-        tickformat = "%b %d"
-        dtick = "M1"  # monthly ticks
-    else:
-        tickformat = "%b %Y"  # "Aug 2025"
-        dtick = "M1"
+    # total_points = len(past_df) + len(fcst_df)
+    # ----------------------------
+    #  Axis formatting
+    # ----------------------------
+    # Major ticks/labels → every Monday (start of week)
+    # Minor ticks       → every calendar day
+    fig.update_xaxes(
+        dtick="W1",  # 1-week step, weeks start Monday
+        tickformat="%b %d",  # e.g. "Aug 04"
+        ticklabelmode="period",  # label Monday at the END of the period  (Plotly ≥5.5)
+        minor=dict(dtick="D1", showgrid=False),  # subticks daily
+        showgrid=True,
+    )
+
+    fig.update_yaxes(showgrid=True, zeroline=False)
 
     fig.update_layout(
         title=f"Closing Price Forecast for {ticker.upper()}",
@@ -74,9 +97,6 @@ def build_chart(data: dict, ticker: str) -> go.Figure:
         margin=dict(l=40, r=20, t=60, b=40),
         hovermode="x unified",
     )
-
-    fig.update_xaxes(tickformat=tickformat, dtick=dtick, showgrid=False)
-    fig.update_yaxes(showgrid=True, zeroline=False)
 
     return fig
 
@@ -93,11 +113,12 @@ def main() -> None:
     ticker = st.sidebar.text_input("Ticker", value="AMZN", max_chars=10)
     past_horizon = st.sidebar.slider(
         "Past Horizon (business days)",
-        min_value=5,
-        max_value=60,
-        value=30,
+        min_value=0,
+        max_value=40,
+        value=20,
         step=5,
     )
+    past_horizon = max(past_horizon, 1)  # ensure at least one day
 
     if st.sidebar.button("Fetch & Plot"):
         with st.spinner("Contacting API…"):
