@@ -23,7 +23,7 @@ A first model is already online as a REST API (technical details below). I decid
 > Once it’s running you’ll see a chart like this, combining the latest historical data with the 5-day forecast:
 <img src="documentation/images/demo.png" width=500 />
 
-## Tech stack and Solution Architecture
+## Tech stack at a glance
 
 | Purpose | Tooling |
 |---------|---------|
