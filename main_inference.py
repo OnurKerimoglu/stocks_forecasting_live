@@ -195,4 +195,4 @@ def predict_endpoint() -> dict:
 #     stocks_forecasting_inference_flow(
 #         ticker="AAPL", use_model_registry=False, past_horizon=10
 #     )
-app.run(debug=True, host="0.0.0.0", port=9696)
+# app.run(debug=True, host="0.0.0.0", port=9696)
