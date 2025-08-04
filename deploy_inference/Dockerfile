@@ -12,8 +12,8 @@ COPY src/__init__.py ../src/data.py ./src/
 RUN pip install -r requirements.txt -e .
 
 # Copy model artifacts
-COPY data/extracted_model/model.pkl ./deployment/model.pkl
-COPY data/extracted_model/params.json ./deployment/params.json
+COPY data/extracted_model/model.pkl ./data/extracted_model/model.pkl
+COPY data/extracted_model/params.json ./data/extracted_model/params.json
 
 # Copy inference entry point
 COPY main_inference.py ./main_inference.py
