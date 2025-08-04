@@ -13,6 +13,16 @@ My priority has not been to craft *the* perfect model so far, but to build an en
 - **Monitor data and model performance** continuously and identify potential drifts.
 - **Enable managing cloud resources with IaC** so the entire stack can be spun up—or torn down—in one command.
 
+### 🔮 Live Inference Demo
+
+A first model is already online as a REST API (technical details below). I decided not to publish it openly to avoid potentially excessive costs, but here a simple [Streamlit app](deploy_demo/demo.py) to give it a try: https://stocks-forecasting.streamlit.app.
+
+<https://your-streamlit-url.app> &nbsp;|&nbsp; Source: [`deploy_demo/demo.py`](deploy_demo/demo.py)
+
+> **Heads-up:** the demo is hosted on Streamlit Community Cloud for now, so an idle app may take a few seconds to wake up.
+> Once it’s running you’ll see a chart like this, combining the latest historical data with the 5-day forecast:
+<img src="documentation/images/demo.png" width=500 />
+
 ## Tech stack at a glance
 
 | Purpose | Tooling |
@@ -27,7 +37,6 @@ My priority has not been to craft *the* perfect model so far, but to build an en
 | Data & model monitoring | **Grafana + Evidently AI** |
 | Code quality | **Ruff** (lint/format) + **Pytest** (unit tests) |
 | CI/CD | **GitHub Actions** |
-
 
 ## Instructions for Reproduction
 ### Prerequisites and Initial Setup
