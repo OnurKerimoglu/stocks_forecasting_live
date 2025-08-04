@@ -1,22 +1,17 @@
-# import google.auth.transport.requests
-# import google.oauth2.id_token
 import pandas as pd
 import plotly.graph_objects as go
 import requests
 import streamlit as st
 
-# API_URL = os.environ["API_URL"]
-API_URL = "http://0.0.0.0:9696"
 
-
-def call_api(ticker: str, past_horizon: int) -> dict:
-    # Obtain a signed ID token for the audience
-    # request = google.auth.transport.requests.Request()
-    # token = google.oauth2.id_token.fetch_id_token(request, API_URL)
-
-    # headers = {"Authorization": f"Bearer {token}"}
+def call_api(ticker: str, past_horizon: int, env: str) -> dict:
+    if env == "local":
+        API_URL = "http://0.0.0.0:9696"
+    else:
+        API_URL_TEMPLATE = st.secrets["global"]["API_URL_TEMPLATE"]
+        API_URL = API_URL_TEMPLATE.replace("ENV", env)
     pl_in = {"ticker": ticker, "past_horizon": past_horizon}
-    resp = requests.post(f"{API_URL}/forecast", json=pl_in, timeout=10)
+    resp = requests.post(f"{API_URL}/forecast", json=pl_in, timeout=30)
     resp.raise_for_status()
     pl_out = resp.json()
     return pl_out
@@ -30,11 +25,8 @@ def build_chart(data: dict, ticker: str) -> go.Figure:
     # add the last day of past_df to fcst_df
     fcst_df = pd.concat([past_df.iloc[-1:], fcst_df])
 
-    # past_df.set_index("Date", inplace=True)
-    # fcst_df.set_index("Date", inplace=True)
-
-    past_df["Date"] = pd.to_datetime(past_df["Date"])  # parses the RFC date string
-    fcst_df["Date"] = pd.to_datetime(fcst_df["Date"])
+    past_df["Date"] = pd.to_datetime(past_df["Date"], utc=True).dt.tz_convert(None)
+    fcst_df["Date"] = pd.to_datetime(fcst_df["Date"], utc=True).dt.tz_convert(None)
 
     # Build figure
     fig = go.Figure()
@@ -72,30 +64,43 @@ def build_chart(data: dict, ticker: str) -> go.Figure:
         )
     )
 
-    # Adaptive X-axis formatting depending on total horizon
-    # total_points = len(past_df) + len(fcst_df)
-    # ----------------------------
-    #  Axis formatting
-    # ----------------------------
-    # Major ticks/labels → every Monday (start of week)
-    # Minor ticks       → every calendar day
-    fig.update_xaxes(
-        dtick="W1",  # 1-week step, weeks start Monday
-        tickformat="%b %d",  # e.g. "Aug 04"
-        ticklabelmode="period",  # label Monday at the END of the period  (Plotly ≥5.5)
-        minor=dict(dtick="D1", showgrid=False),  # subticks daily
-        showgrid=True,
+    # Axis formatting
+    # Major ticks/labels: every Monday (start of week)
+    # Minor ticks: every calendar day
+    mondays = pd.date_range(
+        start=past_df["Date"].min().normalize(),
+        end=fcst_df["Date"].max().normalize(),
+        freq="W-MON",
     )
+    tickvals = [d.to_pydatetime() for d in mondays]
+    ticktext = [d.strftime("%b %d") for d in mondays]
 
+    fig.update_xaxes(
+        tickvals=tickvals,
+        ticktext=ticktext,
+        showgrid=True,
+        minor=dict(
+            dtick="D1",
+            ticklen=6,
+            tickcolor="black",
+            tickmode="auto",
+            nticks=10,
+            showgrid=True,
+        ),
+    )
     fig.update_yaxes(showgrid=True, zeroline=False)
 
     fig.update_layout(
-        title=f"Closing Price Forecast for {ticker.upper()}",
+        title=f"Closing Price Forecast for: {ticker.upper()}",
         xaxis_title="Date",
         yaxis_title="Price (USD)",
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        margin=dict(l=40, r=20, t=60, b=40),
         hovermode="x unified",
+        font=dict(size=14),
+        autosize=False,
+        width=1000,
+        height=600,
+        margin=dict(l=50, r=50, b=100, t=100, pad=4),
     )
 
     return fig
@@ -111,21 +116,24 @@ def main() -> None:
     # --- Sidebar controls ---
     st.sidebar.header("Query Parameters")
     ticker = st.sidebar.text_input("Ticker", value="AMZN", max_chars=10)
-    past_horizon = st.sidebar.slider(
-        "Past Horizon (business days)",
-        min_value=0,
-        max_value=40,
-        value=20,
-        step=5,
-    )
-    past_horizon = max(past_horizon, 1)  # ensure at least one day
+    # past_horizon = st.sidebar.slider(
+    #     "Past Horizon (business days)",
+    #     min_value=0,
+    #     max_value=40,
+    #     value=20,
+    #     step=5,
+    # )
+    # past_horizon = max(past_horizon, 1)  # ensure at least one day
+    past_horizon = 20
+    env = st.secrets["global"]["env"]
 
     if st.sidebar.button("Fetch & Plot"):
         with st.spinner("Contacting API…"):
             try:
-                payload = call_api(ticker, past_horizon)
+                st.write(f"Calling API for {env} env")
+                payload = call_api(ticker, past_horizon, env)
                 fig = build_chart(payload, ticker)
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, use_container_width=False)
             except requests.HTTPError as e:
                 st.error(f"API request failed: {e}")
             except Exception as err:
