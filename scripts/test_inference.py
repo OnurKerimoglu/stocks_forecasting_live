@@ -85,7 +85,7 @@ if __name__ == "__main__":
         type=int,
         required=False,
         help="number (days) of past prices should be returned",
-        default=0,
+        default=1,
     )
     args = parser.parse_args()
 
