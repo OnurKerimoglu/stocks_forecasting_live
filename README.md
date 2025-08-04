@@ -23,7 +23,7 @@ A first model is already online as a REST API (technical details below). I decid
 > Once it’s running you’ll see a chart like this, combining the latest historical data with the 5-day forecast:
 <img src="documentation/images/demo.png" width=500 />
 
-## Tech stack at a glance
+## Tech stack and Solution Architecture
 
 | Purpose | Tooling |
 |---------|---------|
@@ -37,6 +37,10 @@ A first model is already online as a REST API (technical details below). I decid
 | Data & model monitoring | **Grafana + Evidently AI** |
 | Code quality | **Ruff** (lint/format) + **Pytest** (unit tests) |
 | CI/CD | **GitHub Actions** |
+
+
+The solution architecture and the flow of logic and data between the main components is as follows:
+<img src="documentation/images/Stocks_Forecasting.png" width=1000 />
 
 ## Instructions for Reproduction
 ### Prerequisites and Initial Setup
