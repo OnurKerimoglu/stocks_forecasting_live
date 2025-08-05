@@ -20,7 +20,7 @@ A first model is already online as a REST API (technical details below). I decid
 <https://your-streamlit-url.app> &nbsp;|&nbsp; Source: [`deploy_demo/demo.py`](deploy_demo/demo.py)
 
 > **Heads-up:** the demo is hosted on Streamlit Community Cloud for now, so an idle app may take a few seconds to wake up.
-> Once it’s running you’ll see a chart like this, combining the latest historical data with the 5-day forecast:
+> Once it’s running, enter the ticker symbol, click `Fetch and Plot`, and you’ll see a chart like this, combining the latest historical data with the 5-day forecast:
 <img src="documentation/images/demo.png" width=500 />
 
 ## Tech stack and Solution Architecture
@@ -171,3 +171,9 @@ Monitoring is achieved through:
     - backfill_horizon: number of (business) days (backwards from the last available date) monitoring dashboard should be refreshed for
 5. Inspection of results: in Grafana -> Dashboards -> a dashboard named 'Base Monitoring' (sourced from [base_monitoring.json](monitoring/dashboards/base_monitoring.json))  will be available, that should look like:
 <img src="documentation/images/grafana_base_dashboard.png" width=500 />
+
+## License
+
+This project is licensed under the MIT License, with a [Commons Clause](https://commonsclause.com/) restriction that prohibits commercial use without a separate license.
+
+See [LICENSE](./LICENSE) for full details.
