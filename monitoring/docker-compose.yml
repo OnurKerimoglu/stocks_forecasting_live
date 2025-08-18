@@ -10,7 +10,7 @@ networks:
 services:
   db:
     image: postgres
-    restart: always
+    restart: unless-stopped
     environment:
       POSTGRES_PASSWORD: admin
     ports:
@@ -20,7 +20,7 @@ services:
 
   adminer:
     image: adminer
-    restart: always
+    restart: unless-stopped
     ports:
       - "8085:8080"
     networks:
@@ -29,6 +29,7 @@ services:
 
   grafana:
     image: grafana/grafana-enterprise
+    restart: unless-stopped
     user: "472"
     ports:
       - "3000:3000"
@@ -39,4 +40,3 @@ services:
     networks:
       - back-tier
       - front-tier
-    restart: always
