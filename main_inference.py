@@ -1,4 +1,4 @@
-import datetime
+import gzip
 import json
 import logging
 import os
@@ -7,8 +7,7 @@ import pickle
 import mlflow
 import numpy as np
 import pandas as pd
-import yfinance as yf
-from flask import Flask, jsonify, request
+from flask import Flask, abort, jsonify, request
 from mlflow.tracking import MlflowClient
 from xgboost import XGBRegressor
 
@@ -17,6 +16,7 @@ from data import (
     clean_raw_data,
     create_X_y_multistep,
 )
+from utils import fetch_ticker_data_from_yf
 
 # Global parameters
 mlflow.set_tracking_uri("http://127.0.0.1:5000")
@@ -35,13 +35,19 @@ logging.basicConfig(
 
 
 def stocks_forecasting_inference_flow(
-    ticker: str = "AAPL", use_model_registry: bool = False, past_horizon: int = 1
+    ticker: str = "AAPL",
+    data_dict: dict | None = None,
+    use_model_registry: bool = False,
+    past_horizon: int = 1,
 ) -> None:
     if use_model_registry:
         model, params = retrieve_registered_model()
     else:
         model, params = retrieve_locally_stored_model()
-    df_init = retrieve_ticker_data(ticker)
+    if data_dict is None:
+        df_init = retrieve_ticker_data(ticker)
+    else:
+        df_init = handle_series_data(data_dict, ticker)
     past, forecast = run_forecast(model, params, df_init, past_horizon=past_horizon)
     logger.info(f"\npast:\n{past}\nforecast:\n{forecast}")
     return past, forecast
@@ -71,43 +77,30 @@ def retrieve_locally_stored_model() -> tuple:
     return model, params
 
 
+def handle_series_data(data_dict: dict, ticker: str) -> pd.DataFrame:
+    dates = data_dict["date"]
+    closes = data_dict["close"]
+    # Build DataFrame
+    df_raw = pd.DataFrame({
+        "Date": pd.to_datetime(dates, utc=True, errors="coerce"),
+        "Close": closes,
+        "Ticker": ticker,
+    })
+    if df_raw["Date"].isna().any():
+        raise ValueError({"Invalid 'date' value(s). Use ISO-8601 like 'YYYY-MM-DD'."})
+    # clean the raw data, but do not winsorize
+    df_clean = clean_raw_data(df_raw, winsorize=False)
+    df_clean.sort_values(["Date"], inplace=True)
+    return df_clean
+
+
 def retrieve_ticker_data(ticker: str) -> pd.DataFrame:
     # download the raw data
     df_raw = fetch_ticker_data_from_yf(ticker=ticker)
-    # clean the raw data (e.g. winsorize returns)
-    df = clean_raw_data(df_raw)
-    df.sort_values(["Date"], inplace=True)
-    return df
-
-
-def fetch_ticker_data_from_yf(ticker: str) -> pd.DataFrame:
-    period_start = datetime.datetime.now() - datetime.timedelta(days=100)
-    logger.info(f"Fetching price data for {ticker}")
-    try:
-        df = yf.download(
-            ticker,
-            start=period_start,
-            end=datetime.datetime.now(),
-            interval="1d",
-            auto_adjust=True,
-            progress=False,
-        )
-    except Exception as e:
-        raise e from ValueError(f"Failed to fetch data for {ticker}")
-
-    # Get rid of the redundant Ticker index
-    df.columns = df.columns.droplevel("Ticker")
-    df.columns.name = None
-    # Re-introduce the ticker as a regular column
-    df["Ticker"] = ticker
-    # Make 'Date' a regular column by resetting the index
-    df.reset_index(inplace=True)
-
-    if df.shape[0] > 0:
-        logger.info(f"Fetched {df.shape[0]} rows for {ticker}")
-    else:
-        raise ValueError(f"No valid raws in fetched data for {ticker}")
-    return df
+    # clean the raw data, but do not winsorize
+    df_clean = clean_raw_data(df_raw, winsorize=False)
+    df_clean.sort_values(["Date"], inplace=True)
+    return df_clean
 
 
 def run_forecast(
@@ -167,9 +160,35 @@ def run_forecast(
     return past_prices, forecast
 
 
+def load_json_maybe_compressed(raw: dict, enc: str | None = None) -> dict:
+    """
+    Supports plain JSON bodies, plus optionally:
+      - Content-Encoding: gzip
+      - Content-Encoding: br   (if 'brotli' is installed)
+    """
+
+    if enc == "gzip":
+        try:
+            decompressed = gzip.decompress(raw)
+        except OSError:
+            abort(400, description="Invalid gzip payload")
+    elif enc in ("", None):
+        # not compressed; leave as-is
+        decompressed = raw
+    else:
+        abort(415, description=f"Unsupported Content-Encoding: {enc}")
+
+    try:
+        input_dict = json.loads(decompressed or b"{}")
+        return input_dict
+    except json.JSONDecodeError:
+        abort(400, description="Invalid JSON")
+
+
 app = Flask("stocks-forecasting")
 
 
+# NOTE: replaced with /v1/forecast/from_symbol, kept for backwards compatibility
 @app.route("/forecast", methods=["POST"])
 def predict_endpoint() -> dict:
     request_json = request.get_json()
@@ -189,6 +208,92 @@ def predict_endpoint() -> dict:
         "forecast": fc.to_dict(orient="records"),
     }
     return jsonify(result)
+
+
+@app.route("/v1/forecast/from_symbol", methods=["POST"])
+def forecast_endpoint_from_symbol() -> dict:
+    request_json = request.get_json()
+    ticker = request_json["ticker"]
+    past_horizon = request_json["past_horizon"]
+    print(f"forecasting for: {ticker}")
+    past, forecast = stocks_forecasting_inference_flow(
+        ticker, use_model_registry=False, past_horizon=past_horizon
+    )
+    # make Date a column instead of the index
+    ld = past.reset_index()
+    fc = forecast.reset_index()
+
+    # turn each row into its own dict of { col: value, … }
+    result = {
+        "past": ld.to_dict(orient="records"),
+        "forecast": fc.to_dict(orient="records"),
+    }
+    return jsonify(result)
+
+
+@app.route("/v1/forecast/from_data", methods=["POST"])
+def forecast_endpoint_from_series() -> dict:
+    """
+    Expects columnar JSON ONLY:
+    {
+      "ticker": "AAPL",
+      "series": {
+        "date":  ["2025-07-21", "2025-07-22", ...],
+        "close": [231.14,       233.02,      ...]
+      }
+      "past_horizon": 1
+    }
+    """
+    print("forecasting from data for symbol:", end="")
+    raw = request.get_data(cache=False)
+    enc = (request.headers.get("Content-Encoding") or "").lower()
+    p = load_json_maybe_compressed(raw, enc)
+    ticker = p.get("ticker", "NA")
+    print(ticker)
+    series = p.get("series") or {}
+    past_horizon = p.get("past_horizon", 1)
+
+    dates = series.get("date")
+    closes = series.get("close")
+
+    # Validate columnar payload
+    if not isinstance(series, dict):
+        return jsonify({
+            "error": "'series' must be an object with 'date' and 'close' arrays"
+        }), 400
+    if not isinstance(dates, list) or not isinstance(closes, list):
+        return jsonify({"error": "'date' and 'close' must be arrays"}), 400
+    if len(dates) != len(closes):
+        return jsonify({"error": "date/close lengths must match"}), 400
+    lookback_mindays = 60
+    if (
+        len(dates) < lookback_mindays
+    ):  # models minimum lookback for being able to build all lag and ma features
+        return jsonify({
+            "error": f"Not enough observations; need at least {lookback_mindays} days of data, sent: {len(dates)}."
+        }), 422
+
+    data_dict = {"date": dates, "close": closes}
+
+    print("data validated, forecasting..")
+    # Run your inference flow that accepts a pre-supplied price series
+    past, forecast = stocks_forecasting_inference_flow(
+        ticker=ticker,
+        data_dict=data_dict,
+        use_model_registry=False,
+        past_horizon=past_horizon,
+    )
+
+    # make Date a column instead of the index
+    ld = past.reset_index()
+    fc = forecast.reset_index()
+
+    # turn each row into its own dict of { col: value, … }
+    result = {
+        "past": ld.to_dict(orient="records"),
+        "forecast": fc.to_dict(orient="records"),
+    }
+    return result
 
 
 # if __name__ == "__main__":
