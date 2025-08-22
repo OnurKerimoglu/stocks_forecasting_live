@@ -83,7 +83,7 @@ def remove_raw_data(datapath: str) -> None:
         logger.info(f"Raw data not found @ {raw_data_fpath}")
 
 
-def clean_raw_data(df_raw: pd.DataFrame) -> pd.DataFrame:
+def clean_raw_data(df_raw: pd.DataFrame, winsorize: bool = True) -> pd.DataFrame:
     """
     Cleans and processes raw stock price data.
 
@@ -105,14 +105,15 @@ def clean_raw_data(df_raw: pd.DataFrame) -> pd.DataFrame:
     df_clean.drop_duplicates(subset=["Date", "Ticker"], keep="first", inplace=True)
     df_clean = df_clean[["Date", "Close", "Ticker"]]
     df_clean["returns"] = df_clean.groupby("Ticker")["Close"].pct_change()
-    lower, upper = (
-        df_clean["returns"].quantile(0.01),
-        df_clean["returns"].quantile(0.99),
-    )
-    logger.info(
-        f"The returns are winsorized with upper and lower caps of respectively {upper} and {lower}"
-    )
-    df_clean["returns"] = df_clean["returns"].clip(lower, upper)
+    if winsorize:
+        lower, upper = (
+            df_clean["returns"].quantile(0.01),
+            df_clean["returns"].quantile(0.99),
+        )
+        logger.info(
+            f"The returns are winsorized with upper and lower caps of respectively {upper} and {lower}"
+        )
+        df_clean["returns"] = df_clean["returns"].clip(lower, upper)
     df_clean.dropna(inplace=True)
     return df_clean
 
