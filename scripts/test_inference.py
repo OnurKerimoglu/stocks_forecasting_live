@@ -3,13 +3,20 @@ import requests
 from gcp_functions import get_gcrun_service_url
 from load_configs import Configs
 
+from utils import fetch_ticker_data_from_yf
 
-def main(env: str, ticker: str, past_horizon: int) -> None:
+
+def main(env: str, ticker: str, past_horizon: int, endpoint: str) -> None:
     # Find the correct URL for the specified environment
-    url = find_url_for_env(env)
+    url = find_url_for_env(env, endpoint)
 
     # Send the request
-    pl_in = {"ticker": ticker, "past_horizon": past_horizon}
+    if endpoint.split("/")[-1] in ["forecast", "from_symbol"]:
+        pl_in = {"ticker": ticker, "past_horizon": past_horizon}
+    elif endpoint.split("/")[-1] in ["from_data"]:
+        pl_in = build_by_series_payload_from_yf(
+            ticker=ticker, past_horizon=past_horizon
+        )
     resp = requests.post(url, json=pl_in)
     pl_out = resp.json()
 
@@ -36,11 +43,11 @@ def main(env: str, ticker: str, past_horizon: int) -> None:
     print(forecast_df.round({"Close": 2, "Returns": 6}))
 
 
-def find_url_for_env(env: str) -> str:
+def find_url_for_env(env: str, endpoint: str) -> str:
     assert env in ["local", "test", "dev", "prod"]
 
     if env == "local":
-        url = "http://0.0.0.0:9696/forecast"
+        url = f"http://0.0.0.0:9696/{endpoint}"
     else:
         # url = get_static_url_for_env(env)
         configs = Configs(env).cloud
@@ -50,7 +57,7 @@ def find_url_for_env(env: str) -> str:
             region=configs["gcs"]["region"],
             project_id=configs["gcs"]["project"],
         )
-        url = f"{url_root}/forecast"
+        url = f"{url_root}/{endpoint}"
     print(f"for the requested {env} environment, service url is: {url}")
     return url
 
@@ -58,6 +65,41 @@ def find_url_for_env(env: str) -> str:
 def get_static_url_for_env(env: str) -> str:
     url = f"https://stocks-forecasting-service-{env}-qlypn5u2fq-ew.a.run.app"
     return url
+
+
+def build_by_series_payload_from_yf(ticker: str, past_horizon: int) -> dict:
+    """
+    Fetches data via with fetch_ticker_data_from_yf(ticker)
+    and returns the columnar JSON dict expected by the /from_data endpoint.
+
+    Assumptions:
+      - DataFrame has columns 'Date' and 'Close'
+      - 'Date' is parseable to datetime
+    """
+    df = fetch_ticker_data_from_yf(ticker)
+
+    if "Date" not in df.columns or "Close" not in df.columns:
+        raise ValueError("DataFrame must contain 'Date' and 'Close' columns.")
+
+    df = df[["Date", "Close"]].copy()
+    df["Date"] = pd.to_datetime(df["Date"], utc=True, errors="coerce")
+
+    # Clean + order
+    df = (
+        df.dropna(subset=["Date", "Close"])
+        .sort_values("Date")
+        .drop_duplicates(subset=["Date"], keep="last")
+    )
+
+    payload = {
+        "ticker": ticker,
+        "series": {
+            "date": df["Date"].dt.strftime("%Y-%m-%d").tolist(),
+            "close": df["Close"].astype(float).tolist(),
+        },
+        "past_horizon": past_horizon,
+    }
+    return payload
 
 
 if __name__ == "__main__":
@@ -70,7 +112,7 @@ if __name__ == "__main__":
         "--ticker",
         type=str,
         required=False,
-        help="ticker symbol, e.g., 'AMZN",
+        help="ticker symbol, e.g., 'AMZN'",
         default="AMZN",
     )
     parser.add_argument(
@@ -85,8 +127,22 @@ if __name__ == "__main__":
         type=int,
         required=False,
         help="number (days) of past prices should be returned",
-        default=1,
+        default=10,
+    )
+    parser.add_argument(
+        "--endpoint",
+        type=str,
+        required=False,
+        help="forecasting endpoint",  # options: forecast/from_symbol, forecast/from_series
+        # default="v1/forecast/from_data",
+        default="v1/forecast/from_symbol",
+        # default="forecast"
     )
     args = parser.parse_args()
 
-    main(env=args.env, ticker=args.ticker, past_horizon=args.past_horizon)
+    main(
+        env=args.env,
+        ticker=args.ticker,
+        past_horizon=args.past_horizon,
+        endpoint=args.endpoint,
+    )
