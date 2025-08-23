@@ -188,28 +188,6 @@ def load_json_maybe_compressed(raw: dict, enc: str | None = None) -> dict:
 app = Flask("stocks-forecasting")
 
 
-# NOTE: replaced with /v1/forecast/from_symbol, kept for backwards compatibility
-@app.route("/forecast", methods=["POST"])
-def predict_endpoint() -> dict:
-    request_json = request.get_json()
-    ticker = request_json["ticker"]
-    past_horizon = request_json["past_horizon"]
-    print(f"forecasting for: {ticker}")
-    past, forecast = stocks_forecasting_inference_flow(
-        ticker, use_model_registry=False, past_horizon=past_horizon
-    )
-    # make Date a column instead of the index
-    ld = past.reset_index()
-    fc = forecast.reset_index()
-
-    # turn each row into its own dict of { col: value, … }
-    result = {
-        "past": ld.to_dict(orient="records"),
-        "forecast": fc.to_dict(orient="records"),
-    }
-    return jsonify(result)
-
-
 @app.route("/v1/forecast/from_symbol", methods=["POST"])
 def forecast_endpoint_from_symbol() -> dict:
     request_json = request.get_json()
