@@ -1,9 +1,16 @@
+import logging
+
 import pandas as pd
 import requests
 from gcp_functions import get_gcrun_service_url
 from load_configs import Configs
 
 from data import fetch_ticker_data_from_yf
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.INFO, format="%(asctime)s [%(levelname)s]: %(message)s"
+)
 
 
 def main(env: str, ticker: str, past_horizon: int, endpoint: str) -> None:
@@ -12,11 +19,11 @@ def main(env: str, ticker: str, past_horizon: int, endpoint: str) -> None:
 
     # Send the request
     if endpoint.split("/")[-1] in ["forecast", "from_symbol"]:
+        logger.info(f"Sending the ticker symmbol to the {endpoint} endpoint")
         pl_in = {"ticker": ticker, "past_horizon": past_horizon}
     elif endpoint.split("/")[-1] in ["from_data"]:
-        pl_in = build_by_series_payload_from_yf(
-            ticker=ticker, past_horizon=past_horizon
-        )
+        logger.info(f"Fetching ticker data and sending it to the {endpoint} endpoint")
+        pl_in = build_payload_with_data(ticker=ticker, past_horizon=past_horizon)
     resp = requests.post(url, json=pl_in)
     pl_out = resp.json()
 
@@ -67,14 +74,10 @@ def get_static_url_for_env(env: str) -> str:
     return url
 
 
-def build_by_series_payload_from_yf(ticker: str, past_horizon: int) -> dict:
+def build_payload_with_data(ticker: str, past_horizon: int) -> dict:
     """
     Fetches data via with fetch_ticker_data_from_yf(ticker)
     and returns the columnar JSON dict expected by the /from_data endpoint.
-
-    Assumptions:
-      - DataFrame has columns 'Date' and 'Close'
-      - 'Date' is parseable to datetime
     """
     df = fetch_ticker_data_from_yf(ticker)
 
@@ -134,8 +137,8 @@ if __name__ == "__main__":
         type=str,
         required=False,
         help="forecasting endpoint",  # options: forecast/from_symbol, forecast/from_series
-        # default="v1/forecast/from_data",
-        default="v1/forecast/from_symbol",
+        default="v1/forecast/from_data",
+        # default="v1/forecast/from_symbol",
         # default="forecast"
     )
     args = parser.parse_args()
