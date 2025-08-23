@@ -139,7 +139,6 @@ if __name__ == "__main__":
         help="forecasting endpoint",  # options: forecast/from_symbol, forecast/from_series
         default="v1/forecast/from_data",
         # default="v1/forecast/from_symbol",
-        # default="forecast"
     )
     args = parser.parse_args()
 
