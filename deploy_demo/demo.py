@@ -4,14 +4,14 @@ import requests
 import streamlit as st
 
 
-def call_api(ticker: str, past_horizon: int, env: str) -> dict:
+def call_api(ticker: str, past_horizon: int, env: str, endpoint: str) -> dict:
     if env == "local":
         API_URL = "http://0.0.0.0:9696"
     else:
         API_URL_TEMPLATE = st.secrets["global"]["API_URL_TEMPLATE"]
         API_URL = API_URL_TEMPLATE.replace("ENV", env)
     pl_in = {"ticker": ticker, "past_horizon": past_horizon}
-    resp = requests.post(f"{API_URL}/forecast", json=pl_in, timeout=30)
+    resp = requests.post(f"{API_URL}/{endpoint}", json=pl_in, timeout=30)
     resp.raise_for_status()
     pl_out = resp.json()
     return pl_out
@@ -126,12 +126,13 @@ def main() -> None:
     # past_horizon = max(past_horizon, 1)  # ensure at least one day
     past_horizon = 20
     env = st.secrets["global"]["env"]
+    endpoint = st.secrets["global"]["endpoint"]
 
     if st.sidebar.button("Fetch & Plot"):
         with st.spinner("Contacting API…"):
             try:
                 st.write(f"Calling API for {env} env")
-                payload = call_api(ticker, past_horizon, env)
+                payload = call_api(ticker, past_horizon, env, endpoint)
                 fig = build_chart(payload, ticker)
                 st.plotly_chart(fig, use_container_width=False)
             except requests.HTTPError as e:
