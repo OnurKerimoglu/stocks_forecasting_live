@@ -7,7 +7,7 @@ WORKDIR /app
 # Copy project metadata and source files for editable install
 COPY deploy_inference/setup.py ./
 COPY deploy_inference/inference_requirements.txt ./requirements.txt
-COPY src/__init__.py ../src/data.py ./src/
+COPY src/* ./src/
 # Install the project in editable mode
 RUN pip install -r requirements.txt -e .
 
