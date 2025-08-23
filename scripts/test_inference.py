@@ -3,7 +3,7 @@ import requests
 from gcp_functions import get_gcrun_service_url
 from load_configs import Configs
 
-from utils import fetch_ticker_data_from_yf
+from data import fetch_ticker_data_from_yf
 
 
 def main(env: str, ticker: str, past_horizon: int, endpoint: str) -> None:
