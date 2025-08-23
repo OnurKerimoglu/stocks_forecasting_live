@@ -15,8 +15,8 @@ from data import (
     build_features,
     clean_raw_data,
     create_X_y_multistep,
+    fetch_ticker_data_from_yf,
 )
-from utils import fetch_ticker_data_from_yf
 
 # Global parameters
 mlflow.set_tracking_uri("http://127.0.0.1:5000")
