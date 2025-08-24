@@ -243,12 +243,13 @@ def forecast_endpoint_from_series() -> dict:
         return jsonify({"error": "'date' and 'close' must be arrays"}), 400
     if len(dates) != len(closes):
         return jsonify({"error": "date/close lengths must match"}), 400
-    lookback_mindays = 60
+    mindays_tobuild_features = 50
+    lookback_mindays = mindays_tobuild_features + past_horizon
     if (
         len(dates) < lookback_mindays
     ):  # models minimum lookback for being able to build all lag and ma features
         return jsonify({
-            "error": f"Not enough observations; need at least {lookback_mindays} days of data, sent: {len(dates)}."
+            "error": f"Not enough observations; need at least {lookback_mindays} days of data ({past_horizon} of which past), sent: {len(dates)}."
         }), 422
 
     data_dict = {"date": dates, "close": closes}
@@ -276,6 +277,6 @@ def forecast_endpoint_from_series() -> dict:
 
 # if __name__ == "__main__":
 #     stocks_forecasting_inference_flow(
-#         ticker="AAPL", use_model_registry=False, past_horizon=10
+#         ticker="AAPL", use_model_registry=False, past_horizon=5
 #     )
 # app.run(debug=True, host="0.0.0.0", port=9696)
