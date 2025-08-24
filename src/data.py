@@ -68,8 +68,10 @@ def load_raw_data(
     return df_raw, access_date_str
 
 
-def fetch_ticker_data_from_yf(ticker: str) -> pd.DataFrame:
-    period_start = datetime.now() - timedelta(days=100)
+def fetch_ticker_data_from_yf(
+    ticker: str, fetchperiodinweeks: int = 14
+) -> pd.DataFrame:
+    period_start = datetime.now() - timedelta(weeks=fetchperiodinweeks)
     logger.info(f"Fetching price data for {ticker}")
     try:
         df = yf.download(
