@@ -18,7 +18,7 @@ def main(env: str, ticker: str, past_horizon: int, endpoint: str) -> None:
     url = find_url_for_env(env, endpoint)
 
     # Send the request
-    if endpoint.split("/")[-1] in ["forecast", "from_symbol"]:
+    if endpoint.split("/")[-1] in ["from_symbol"]:
         logger.info(f"Sending the ticker symmbol to the {endpoint} endpoint")
         pl_in = {"ticker": ticker, "past_horizon": past_horizon}
     elif endpoint.split("/")[-1] in ["from_data"]:
