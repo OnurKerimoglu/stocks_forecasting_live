@@ -39,7 +39,7 @@ A first model is already online as a REST API (technical details below). I decid
 | CI/CD | **GitHub Actions** |
 
 
-The solution architecture and the flow of logic and data between the main components is as follows:
+The solution architecture and the flow of logic and data between the main components is illustrated here:
 <img src="documentation/images/Stocks_Forecasting.png" width=1000 />
 
 ## Instructions for Reproduction
@@ -84,10 +84,11 @@ This project uses GCP services for deployment, managed by [Hashicorp Terraform](
 - In the cloud, three environments are defined: `prod`, `dev` and `test`. The former two correspond to the primary branches of the git repository, whereas any other branch (e.g., `feature/xyz`) is supposed to communicate with the `test` environment.
 
 
-### Training Pipeline
+### Training Worfklow
+The training workflow is described in [documentation](./documentation/documentation.md#workflow). For experimenting the feature engineering and model-specific options and choosing the best model, Mlflow is used, and the whole workflow is orchestrated by Prefect. Operational instructions are provided in the next sections.
 
 #### Experiment Tracking and Model Registry
-is handled by [mlflow](https://mlflow.org/). To activate mlflow server, simply open a new terminal, activate the venv and issue `make mlflow_serve` (see the [Makefile](Makefile)). On a browser, navigate to `http://localhost:5000` to access the Mlflow GUI. To stop the server, hit Ctrl+C on the terminal.  See [here](./documentation/documentation.md#experiment-tracking-and-model-registry) for the details on experiment tracking and model registry.
+is handled by [mlflow](https://mlflow.org/). To activate mlflow server, simply open a new terminal, activate the venv and issue `make mlflow_serve` (see the [Makefile](Makefile)). On a browser, navigate to `http://localhost:5000` to access the Mlflow GUI. To stop the server, hit Ctrl+C on the terminal.  See [the documentation](./documentation/documentation.md#experiment-tracking-and-model-registry) for the details on experiment tracking and model registry.
 
 #### Initiating the Orchestrator
 is handled by [prefect](https://www.prefect.io/) (will be installed as a dependency). The workflow deployment requires activation of the mlflow server first (previous section), and comprise the following steps:
@@ -97,7 +98,7 @@ is handled by [prefect](https://www.prefect.io/) (will be installed as a depende
   - schedule: weekly training schedule for the `prod` environment, otherwise (`dev`, `test`) none
   - source: for `test` environment the deployment will be sourced from the local file system, otherwise (`dev`, `prod`) from the respective branch of the remote repository (i.e. the state correspoding to that of github). The deployed workflows can be seen in the GUI, Deployments tab. The status should become 'Ready', once the worker has started (may take a few seconds).
 
-To stop the worker, and the prefect server, hit Ctrl+C in the respective terminals. See [here](./documentation/documentation.md#workflow-orchestration) for the details on workflow orchestration.
+To stop the worker, and the prefect server, hit Ctrl+C in the respective terminals.
 
 #### Manually Triggering an Experiment on the Training Pipeline
 
@@ -107,10 +108,26 @@ A manual run can be triggered on the `dev` and `test` deployment (on `prod` depl
   - select_only_latest (default: True): if True, the best model run will be selected only among runs from the current date, i.e., ignoring the previous runs
 
 ### Inference Pipeline
+The inference pipeline, i.e., the 'stocks_forecasting_inference_flow' function in [main_inference.py](main_inference.py):
+- accepts either of:
+  - the recent price data () with which the forecasts will be made
+  - the ticker symbol, for which the recent data will be retrieved from yahoo finance
+- runs the data preprocessing and feature engineering pipelines (based on the 'champion' parameters so that the data processing for the model training can be reproduced - see the [documentation](documentation/documentation.md))
+- runs the champion model (see the next section)
+- returns the forecasts and the requested amount of recent data
+
+The inference service exposes a REST API (implemented with [Flask](https://palletsprojects.com/projects/flask/)) with two POST endpoints: /v1/forecast/from_data and /v1/forecast/from_symbol—for forecasting from user-supplied price data or by ticker symbol, respectively. Here is an overview:
+
+| Method | Path                        | Description                                                 | Example json payload |
+|:------:|-----------------------------|-------------------------------------------------------------|------------------------|
+| POST   | `/v1/forecast/from_symbol`  | Forecasts by ticker symbol; the service fetches recent data  | ```{"ticker": "AAPL", "past_horizon": 10}``` |
+| POST   | `/v1/forecast/from_data`    | Forecasts using user-provided recent (closing) price data | ```{"ticker": "AAPL", "series": {"date":  ["2025-07-21", "2025-07-22", ...], "close": [231.14,       233.02,      ...]}, "past_horizon": 1}``` |
+
+See the following sections for the instructions on building, deploying and testing the service.
 
 #### Local Build and Deployment
 Building the inference pipeline is a two-step process:
-1. Model extraction from mlflow: issue `make extract_registered_model`, only after making sure that the mlflow server is running (if not `make mlflow_serve`). This will query mlflow and get the run_id of the model registered with alias 'champion' (i.e., last version) in the 'stocks_forecasting_candidates' stack, and copy the `model.pkl` and `requirements.txt` artifacts as well as the parameters as `params.json` into an `data/extracted_model` folder under project root (after removing its previous contents), and sync the contents of this folder with the GCS `models_bucket` bucket defined in [config/gcs.yml](config/gcs.yml), depending on the current branch that sets the environment (`prod`->`prod`, `dev`->`dev`, otherwise `test`).
+1. Model extraction from mlflow: issue `make extract_registered_model`, only after making sure that the mlflow server is running (if not `make mlflow_serve`). This will query mlflow and get the run_id of the model lineage registered with alias 'champion' (i.e., last version) in the 'stocks_forecasting_candidates' stack, and copy the `model.pkl` and `requirements.txt` artifacts as well as the parameters as `params.json` into an `data/extracted_model` folder under project root (after removing its previous contents), and sync the contents of this folder with the GCS `models_bucket` bucket defined in [config/gcs.yml](config/gcs.yml), depending on the current branch that sets the environment (`prod`->`prod`, `dev`->`dev`, otherwise `test`).
 2. Building the container image:  issue `make inference_build_local`. After triggering the `quality_checks` and `tests` targets (see [initial setup](#prerequisites-and-initial-setup)) to catch any obvious flaws, and checking whether the branch is clean state, the [deploy_inference/Dockerfile](deploy_inference/Dockerfile) will pack all necessary files and install packages needed for serving the inference pipeline. The current branch name (in sanitized form) and the (short) SHA of the latest commit will be appended to the tag of the Image-URI to allow tracibility.
 
 For testing local code  (e.g., a feature branch that has not been published yet), this container can be deployed locally with `make inference_serve_local`. This will start the flask app at `http://0.0.0.0:9696`
