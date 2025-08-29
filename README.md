@@ -39,7 +39,7 @@ A first model is already online as a REST API (technical details below). I decid
 | CI/CD | **GitHub Actions** |
 
 
-The solution architecture and the flow of logic and data between the main components is as follows:
+The solution architecture and the flow of logic and data between the main components is illustrated here:
 <img src="documentation/images/Stocks_Forecasting.png" width=1000 />
 
 ## Instructions for Reproduction
@@ -107,10 +107,26 @@ A manual run can be triggered on the `dev` and `test` deployment (on `prod` depl
   - select_only_latest (default: True): if True, the best model run will be selected only among runs from the current date, i.e., ignoring the previous runs
 
 ### Inference Pipeline
+The inference pipeline:
+- accepts either of:
+  - the recent price data () with which the forecasts will be made
+  - the ticker symbol, for which the recent data will be retrieved from yahoo finance
+- runs the data preprocessing and feature engineering pipelines (based on the 'champion' parameters so that the data processing for the model training can be reproduced)
+- runs the champion model (see the next section)
+- returns the forecasts and the requested amount of recent data
+
+The inference service exposes a REST API (implemented with [Flask](https://palletsprojects.com/projects/flask/)) with two POST endpoints: /v1/forecast/from_data and /v1/forecast/from_symbol—for forecasting from user-supplied price data or by ticker symbol, respectively. Here is an overview:
+
+| Method | Path                        | Description                                                 | Example json payload |
+|:------:|-----------------------------|-------------------------------------------------------------|------------------------|
+| POST   | `/v1/forecast/from_symbol`  | Forecasts by ticker symbol; the service fetches recent data  | ```{"ticker": "AAPL", "past_horizon": 10}``` |
+| POST   | `/v1/forecast/from_data`    | Forecasts using user-provided recent (closing) price data | ```{"ticker": "AAPL", "series": {"date":  ["2025-07-21", "2025-07-22", ...], "close": [231.14,       233.02,      ...]}, "past_horizon": 1}``` |
+
+See the following sections for the instructions on building, deploying and testing the service.
 
 #### Local Build and Deployment
 Building the inference pipeline is a two-step process:
-1. Model extraction from mlflow: issue `make extract_registered_model`, only after making sure that the mlflow server is running (if not `make mlflow_serve`). This will query mlflow and get the run_id of the model registered with alias 'champion' (i.e., last version) in the 'stocks_forecasting_candidates' stack, and copy the `model.pkl` and `requirements.txt` artifacts as well as the parameters as `params.json` into an `data/extracted_model` folder under project root (after removing its previous contents), and sync the contents of this folder with the GCS `models_bucket` bucket defined in [config/gcs.yml](config/gcs.yml), depending on the current branch that sets the environment (`prod`->`prod`, `dev`->`dev`, otherwise `test`).
+1. Model extraction from mlflow: issue `make extract_registered_model`, only after making sure that the mlflow server is running (if not `make mlflow_serve`). This will query mlflow and get the run_id of the model lineage registered with alias 'champion' (i.e., last version) in the 'stocks_forecasting_candidates' stack, and copy the `model.pkl` and `requirements.txt` artifacts as well as the parameters as `params.json` into an `data/extracted_model` folder under project root (after removing its previous contents), and sync the contents of this folder with the GCS `models_bucket` bucket defined in [config/gcs.yml](config/gcs.yml), depending on the current branch that sets the environment (`prod`->`prod`, `dev`->`dev`, otherwise `test`).
 2. Building the container image:  issue `make inference_build_local`. After triggering the `quality_checks` and `tests` targets (see [initial setup](#prerequisites-and-initial-setup)) to catch any obvious flaws, and checking whether the branch is clean state, the [deploy_inference/Dockerfile](deploy_inference/Dockerfile) will pack all necessary files and install packages needed for serving the inference pipeline. The current branch name (in sanitized form) and the (short) SHA of the latest commit will be appended to the tag of the Image-URI to allow tracibility.
 
 For testing local code  (e.g., a feature branch that has not been published yet), this container can be deployed locally with `make inference_serve_local`. This will start the flask app at `http://0.0.0.0:9696`
