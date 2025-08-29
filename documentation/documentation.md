@@ -1,9 +1,9 @@
 # Documentation
 
-## Training Pipeline
+## Model Training
 
-### Workflow Orchestration
-Training workflow (provided by the [main_training.py](../main_training.py)) have 4 main steps:
+### Workflow
+Training workflow, i.e., stocks_forecasting_training_flow `flow` provided by the [main_training.py](../main_training.py), consists of 4 `task`s:
 1. Base data preparation (task)
     - Get the raw data
     - Clean the raw data
