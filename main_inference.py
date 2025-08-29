@@ -190,6 +190,13 @@ app = Flask("stocks-forecasting")
 
 @app.route("/v1/forecast/from_symbol", methods=["POST"])
 def forecast_endpoint_from_symbol() -> dict:
+    """
+    Expects JSON with the following structure:
+    {
+      "ticker": "AAPL",
+      "past_horizon": 1
+    }
+    """
     request_json = request.get_json()
     ticker = request_json["ticker"]
     past_horizon = request_json["past_horizon"]
