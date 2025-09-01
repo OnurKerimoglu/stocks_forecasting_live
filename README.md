@@ -39,8 +39,74 @@ A first model is already online as a REST API (technical details below). I decid
 | CI/CD | **GitHub Actions** |
 
 
-The solution architecture and the flow of logic and data between the main components is illustrated here:
-<img src="documentation/images/Stocks_Forecasting.png" width=1000 />
+The solution architecture is illustrated in the following L2 flowchart (may require a mermaid previewer for correct visualisation. See the [documentation](documentation/documentation.md) for a more colorful version):
+
+```mermaid
+---
+config:
+  layout: dagre
+---
+ flowchart TB
+ subgraph Ext["External Data"]
+        DSource["Kaggle"]
+  end
+ subgraph Shared["Shared Modules"]
+        DataPP["Data Preprocessing"]
+        Predictor["Estimation"]
+  end
+ subgraph Training["Training"]
+        MlDl["GCS"]
+        Pr["Prefect"]
+        Mlf["Mlflow"]
+  end
+ subgraph Serving["Serving"]
+        GHA["GitHub Actions"]
+        Flask["Flask App"]
+        AR["Artifact Registry"]
+        CE["Cloud Run"]
+        RAPI["Rest API"]
+        Container["Docker Container"]
+  end
+ subgraph Monitoring["Monitoring"]
+        DV["Data Versioning"]
+        Ev["Evidently AI"]
+        Mdashboards["Grafana"]
+        DB["Postgres"]
+  end
+ subgraph MLPl["Machine Learning Platform"]
+        MLE["ML Engineer"]
+        Shared
+        Training
+        Serving
+        Monitoring
+  end
+    DSource --> Pr
+    DataPP -- Features --> Predictor
+    Predictor -- Estimations --> Mlf
+    Predictor-- Estimations --> DV
+    Shared --> Flask
+    Pr --> Mlf
+    Mlf -- Models --> MlDl & Predictor
+    Mlf -- Params --> MlDl & Predictor
+    Mlf -- Data --> DataPP
+    MlDl -- Production Model --> GHA
+    Flask --> GHA
+    GHA -- CI/CD --> Container
+    Container -- Publish --> AR
+    AR -- Deployment --> CE
+    CE -- Serves --> RAPI
+    MlDl -- Ref Model --> DV
+    MlDl -- Ref Params --> DV
+    DV -- Reference Data --> MlDl
+    DV -- New Data --> MlDl
+    DV -- Ref vs. New Features & Estimations --> Ev
+    Ev -- Daily KPIs --> DB
+    DB -- Aggregate KPIs --> Mdashboards
+    MLE -- Trigger --> Pr
+    Mdashboards --> MLE
+    User -- Data --> RAPI
+    RAPI -- Forecasts --> User
+```
 
 ## Instructions for Reproduction
 ### Prerequisites and Initial Setup
