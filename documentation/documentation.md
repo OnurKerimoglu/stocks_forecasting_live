@@ -1,5 +1,9 @@
 # Documentation
 
+Here a more colorful flowchart than shown in the readme:
+
+<img src="images/Stocks_Forecasting.png" width=1000 />
+
 ## Model Training
 
 ### Workflow
