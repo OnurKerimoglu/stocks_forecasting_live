@@ -28,7 +28,7 @@ A first model is already online as a REST API (technical details below). I decid
 | Purpose | Tooling |
 |---------|---------|
 | Infrastructure as Code | **Terraform** |
-| Experiment tracking & model registry | **MLflow** |
+| Experiment tracking & model registry | **Mlflow** |
 | Store & version models / training artifacts | **Google Cloud Storage (GCS)** |
 | Orchestrate and schedule workflows | **Prefect** |
 | Expose REST API | **Flask** |
@@ -39,12 +39,14 @@ A first model is already online as a REST API (technical details below). I decid
 | CI/CD | **GitHub Actions** |
 
 
-The solution architecture is illustrated in the following L2 flowchart (may require a mermaid previewer for correct visualisation. See the [documentation](documentation/documentation.md) for a more colorful version):
+The solution architecture is illustrated in the following L2 flowchart (requires a mermaid previewer extension for correct visualisation on your IDE. See the [documentation](documentation/documentation.md) for a more colorful, png version):
 
 ```mermaid
 ---
 config:
   layout: dagre
+  look: classic
+  theme: dark
 ---
  flowchart TB
  subgraph Ext["External Data"]
@@ -104,7 +106,7 @@ config:
     DB -- Aggregate KPIs --> Mdashboards
     MLE -- Trigger --> Pr
     Mdashboards --> MLE
-    User -- Data --> RAPI
+    User -- Recent Data --> RAPI
     RAPI -- Forecasts --> User
 ```
 
