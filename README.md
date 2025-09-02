@@ -25,7 +25,7 @@ A first model is already online as a REST API (technical details below). I decid
 
 ## Tech stack and Solution Architecture
 
-| Purpose | Tooling |
+| Process | Tooling |
 |---------|---------|
 | Infrastructure as Code | **Terraform** |
 | Experiment tracking & model registry | **Mlflow** |
@@ -39,7 +39,7 @@ A first model is already online as a REST API (technical details below). I decid
 | CI/CD | **GitHub Actions** |
 
 
-Here is an L3 flowchart of the solution architecture that shows specific processes and technologies used (may require a mermaid previewer extension for correct visualisation on your IDE. See the [documentation](documentation/documentation.md) for a more colorful, png version):
+Here is an L3 flowchart of the solution architecture (may require a mermaid previewer extension for correct visualisation on your IDE. See the [documentation](documentation/documentation.md) for a more colorful, png version):
 
 ```mermaid
 ---
