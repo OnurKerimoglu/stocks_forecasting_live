@@ -39,7 +39,7 @@ A first model is already online as a REST API (technical details below). I decid
 | CI/CD | **GitHub Actions** |
 
 
-The solution architecture is illustrated in the following L2 flowchart (requires a mermaid previewer extension for correct visualisation on your IDE. See the [documentation](documentation/documentation.md) for a more colorful, png version):
+Here is an L3 flowchart of the solution architecture that shows specific processes and technologies used (may require a mermaid previewer extension for correct visualisation on your IDE. See the [documentation](documentation/documentation.md) for a more colorful, png version):
 
 ```mermaid
 ---
@@ -57,11 +57,10 @@ config:
         Predictor["Estimation"]
   end
  subgraph Training["Training"]
-        MlDl["GCS"]
         Pr["Prefect"]
-        Mlf["Mlflow"]
+        Mlf["MLflow"]
   end
- subgraph Serving["Serving"]
+ subgraph Serving["Inference"]
         GHA["GitHub Actions"]
         Flask["Flask App"]
         AR["Artifact Registry"]
@@ -77,6 +76,7 @@ config:
   end
  subgraph MLPl["Machine Learning Platform"]
         MLE["ML Engineer"]
+        MlDl[("GCS")]
         Shared
         Training
         Serving
@@ -89,16 +89,16 @@ config:
     Shared --> Flask
     Pr --> Mlf
     Mlf -- Models --> MlDl & Predictor
-    Mlf -- Params --> MlDl & Predictor
+    Mlf -- Parameters --> MlDl & Predictor
     Mlf -- Data --> DataPP
-    MlDl -- Production Model --> GHA
+    MlDl -- Model --> GHA
     Flask --> GHA
     GHA -- CI/CD --> Container
     Container -- Publish --> AR
     AR -- Deployment --> CE
     CE -- Serves --> RAPI
     MlDl -- Ref Model --> DV
-    MlDl -- Ref Params --> DV
+    MlDl -- Ref Parameters --> DV
     DV -- Reference Data --> MlDl
     DV -- New Data --> MlDl
     DV -- Ref vs. New Features & Estimations --> Ev
