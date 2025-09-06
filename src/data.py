@@ -6,6 +6,8 @@ import pandas as pd
 import yfinance as yf
 from statsmodels.tsa.deterministic import CalendarFourier, DeterministicProcess
 
+from gcp_functions import read_file_as_df
+
 logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s [%(levelname)s]: %(message)s"
@@ -543,3 +545,28 @@ def create_X_y_multistep(
         X_all.set_index(["Ticker", "Date"], inplace=True)
         y_multi_all.set_index(["Ticker", "Date"], inplace=True)
         return X_all, y_multi_all
+
+
+def load_data(
+    localrun: bool,
+    prefix: str,
+    fname: str,
+    project: str | None,
+    bucket: str | None,
+    localrootdir: str | None = None,
+) -> pd.DataFrame:
+    if not localrun:
+        # Load the df from GCS
+        logger.info(f"Loading data from GCS bucket: {bucket}")
+        df = read_file_as_df(project, bucket, f"{prefix}/{fname}")
+    else:
+        # Read from the local filesystem
+        fpath = os.path.join(localrootdir, prefix, fname)
+        logger.info(f"Loading data from filesystem: {fpath}")
+        if not os.path.exists(fpath):
+            raise Exception(
+                f"no config provided for GCS and local path {fpath} does not exist"
+            )
+        else:
+            df = pd.read_parquet(fpath)
+    return df

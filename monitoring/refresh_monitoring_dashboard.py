@@ -10,8 +10,9 @@ import pandas as pd
 import psycopg
 from evidently import DataDefinition, Dataset, Report
 from evidently.metrics import DriftedColumnsCount, MissingValueCount, ValueDrift
-from tools import load_data, load_model_artifacts, prepare_data_for_monitoring
+from tools import load_model_artifacts, prepare_data_for_monitoring
 
+from data import load_data
 from scripts.load_configs import Configs
 
 warnings.simplefilter(action="ignore", category=FutureWarning)

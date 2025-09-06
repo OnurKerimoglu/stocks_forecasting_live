@@ -5,14 +5,10 @@ from pickle import load as pload
 
 import pandas as pd
 
-from data import (
-    build_features,
-    create_X_y_multistep,
-)
+from data import build_features, create_X_y_multistep, load_data
 from gcp_functions import (
     load_json_from_gcs,
     load_pickle_from_gcs,
-    read_file_as_df,
 )
 
 logger = logging.getLogger(__name__)
@@ -51,31 +47,6 @@ def load_model_artifacts(
             with open(os.path.join(ref_path, "model.pkl"), "rb") as f:
                 ref_estimator = pload(f)
     return ref_params, ref_estimator
-
-
-def load_data(
-    localrun: bool,
-    prefix: str,
-    fname: str,
-    project: str | None,
-    bucket: str | None,
-    localrootdir: str | None = None,
-) -> pd.DataFrame:
-    if not localrun:
-        # Load the df from GCS
-        logger.info(f"Loading data from GCS bucket: {bucket}")
-        df = read_file_as_df(project, bucket, f"{prefix}/{fname}")
-    else:
-        # Read from the local filesystem
-        fpath = os.path.join(localrootdir, prefix, fname)
-        logger.info(f"Loading data from filesystem: {fpath}")
-        if not os.path.exists(fpath):
-            raise Exception(
-                f"no config provided for GCS and local path {fpath} does not exist"
-            )
-        else:
-            df = pd.read_parquet(fpath)
-    return df
 
 
 def prepare_data_for_monitoring(
