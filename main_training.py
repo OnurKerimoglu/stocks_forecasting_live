@@ -80,8 +80,12 @@ def stocks_forecasting_training_flow(
         whether to select only the latest model under the experiments, i.e., from today
     """
     logger = get_run_logger()
-
-    assert env in ["test", "dev", "prod"]
+    try:
+        assert env in ["test", "dev", "prod"]
+    except Exception as err:
+        raise ValueError(
+            f"env must be one of ['test', 'dev', 'prod'], but got {env}"
+        ) from err
 
     # step1: base data prep (task as sub-flow)
     if env in ["dev", "prod"]:
