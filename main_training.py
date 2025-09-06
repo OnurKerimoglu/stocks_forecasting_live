@@ -28,6 +28,7 @@ TARGET = "returns"
 SAMPLE_TICKERS = ["AAPL", "AMZN"]
 ROOTPATH = os.path.dirname(__file__)
 DATAPATH = os.path.join(ROOTPATH, "data")
+RAWDATAPATH = os.path.join(DATAPATH, "raw")
 CONFPATH = os.path.join(ROOTPATH, "config")
 ISODATE = datetime.date.today().isoformat()
 
@@ -49,6 +50,7 @@ mlflow.set_experiment(EXP_NAME)
 @flow(name="stocks_forecasting_training_flow")
 def stocks_forecasting_training_flow(
     env: str = "prod",
+    datasource: str = "kaggle",
     use_sample_tickers_for_training: bool = True,
     select_only_latest: bool = True,
 ) -> None:
@@ -90,7 +92,7 @@ def stocks_forecasting_training_flow(
             use_sample_tickers_for_training = False
     clean_sample_fdir = os.path.join(DATAPATH, f"cleaned_samples_{env}")
     df, df_train, df_test = base_data_prep(
-        env, use_sample_tickers_for_training, clean_sample_fdir
+        env, datasource, use_sample_tickers_for_training, clean_sample_fdir
     )
 
     # step 2: run experiments (tasks as sub-flow)
@@ -107,7 +109,7 @@ def stocks_forecasting_training_flow(
 
     # step 4: cleanup (task)
     if env in ["dev", "prod"]:
-        remove_raw_data(DATAPATH)
+        remove_raw_data(RAWDATAPATH, datasource)
         logger.info(f"Running in a primary env {env}, therefore removing raw data")
     else:
         # Not removing the raw data in non-primary envs to enable fast test runs
@@ -122,12 +124,14 @@ def stocks_forecasting_training_flow(
 @task(task_run_name="base_data_prep_taskgroup")
 def base_data_prep(
     env: str,
+    datasource: str,
     use_sample_tickers_for_training: bool,
     clean_sample_fdir: str | None = None,
 ) -> tuple:
     # load the raw data
     df_raw, access_date_str = load_raw_data(
-        datapath=DATAPATH,
+        datasource=datasource,
+        rawdatapath=RAWDATAPATH,
         user="nelgiriyewithana",
         datasetname="world-stock-prices-daily-updating",
     )

@@ -13,6 +13,36 @@ logging.basicConfig(
 
 
 def load_raw_data(
+    datasource: str, rawdatapath: str, user: str, datasetname: str
+) -> tuple[pd.DataFrame, str]:
+    """
+    Loads raw data from given datasource.
+    Args:
+    datasource: str
+        The source of the raw data. Currently, only 'kaggle' is supported.
+    datapath: str
+        The path where the raw data will be stored.
+    user: str
+        The username of the user from which the dataset is fetched.
+    datasetname: str
+        The name of the dataset to be fetched.
+    Returns:
+    tuple[pd.DataFrame, str]
+        A tuple containing the raw data as a pandas DataFrame and the date when the data was accessed (as a string in ISO format).
+    """
+    if datasource == "kaggle":
+        df_raw, access_date_str = load_raw_data_from_kaggle(
+            datapath=os.path.join(rawdatapath, "kaggle"),
+            user="nelgiriyewithana",
+            datasetname="world-stock-prices-daily-updating",
+        )
+    else:
+        raise ValueError(f"Unknown datasource: {datasource}")
+
+    return df_raw, access_date_str
+
+
+def load_raw_data_from_kaggle(
     datapath: str, user: str, datasetname: str
 ) -> tuple[pd.DataFrame, str]:
     """
@@ -100,23 +130,30 @@ def fetch_ticker_data_from_yf(
     return df
 
 
-def remove_raw_data(datapath: str) -> None:
+def remove_raw_data(rawdatapath: str, datasource: str) -> None:
     """
     Removes the raw data from the specified path if it exists.
 
     Args:
     datapath : str
         The directory path where the raw data is stored.
+    datasource : str
+        The source of the raw data (only "kaggle" is supported for now)
 
     Returns:
     None
     """
-    raw_data_fpath = os.path.join(datapath, "World-Stock-Prices-Dataset.csv")
-    if os.path.exists(raw_data_fpath):
-        logger.info(f"Removing the raw data @ {raw_data_fpath}")
-        os.remove(raw_data_fpath)
+    if datasource == "kaggle":
+        raw_data_fpath = os.path.join(
+            rawdatapath, "kaggle", "World-Stock-Prices-Dataset.csv"
+        )
+        if os.path.exists(raw_data_fpath):
+            logger.info(f"Removing the raw data @ {raw_data_fpath}")
+            os.remove(raw_data_fpath)
+        else:
+            logger.info(f"Raw data not found @ {raw_data_fpath}")
     else:
-        logger.info(f"Raw data not found @ {raw_data_fpath}")
+        raise ValueError(f"Unknown datasource: {datasource}")
 
 
 def clean_raw_data(df_raw: pd.DataFrame, winsorize: bool = True) -> pd.DataFrame:
