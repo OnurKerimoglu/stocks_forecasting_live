@@ -7,7 +7,7 @@ from pickle import dump
 import pandas as pd
 from tools import load_model_artifacts, prepare_data_for_monitoring
 
-from scripts.gcp_functions import (
+from gcp_functions import (
     upload_directory,
 )
 from scripts.load_configs import Configs

@@ -18,8 +18,8 @@ from data import (
     sample_tickers_dates,
     split_train_test_panel,
 )
+from gcp_functions import upload_file_to_folder
 from models import create_fit_xgbregressor_chain, evaluate_all
-from scripts.gcp_functions import upload_file_to_folder
 from scripts.load_configs import Configs
 from utils import get_pipreqs_from_pyproject
 

@@ -9,7 +9,7 @@ from data import (
     build_features,
     create_X_y_multistep,
 )
-from scripts.gcp_functions import (
+from gcp_functions import (
     load_json_from_gcs,
     load_pickle_from_gcs,
     read_file_as_df,
