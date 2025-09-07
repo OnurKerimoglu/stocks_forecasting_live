@@ -19,8 +19,8 @@ from data import (
     split_train_test_panel,
 )
 from gcp_functions import upload_file_to_folder
+from load_configs import Configs
 from models import create_fit_xgbregressor_chain, evaluate_all
-from scripts.load_configs import Configs
 from utils import get_pipreqs_from_pyproject
 
 # Global parameters

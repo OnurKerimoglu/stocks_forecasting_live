@@ -10,7 +10,7 @@ from tools import load_model_artifacts, prepare_data_for_monitoring
 from gcp_functions import (
     upload_directory,
 )
-from scripts.load_configs import Configs
+from load_configs import Configs
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
