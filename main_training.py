@@ -43,7 +43,9 @@ mlflow.set_tracking_uri("http://127.0.0.1:5000")
 MODEL_ARTIFACT_FOLDER = "mlflow_models"
 REGISTRY_NAME = "stocks_forecasting_candidates"
 CLIENT = MlflowClient()
-EXPS, EXP_NAME = build_exp_dicts(os.path.join(CONFPATH, "Exp_CldrFeats_ModReg.yaml"))
+EXPS, EXP_NAME = build_exp_dicts(
+    os.path.join(CONFPATH, "Exp_CldrFeats_ModReg.yaml")  # _test
+)
 mlflow.set_experiment(EXP_NAME)
 
 
@@ -171,7 +173,7 @@ def run_single_experiment(
     logger = get_run_logger()
     run_name_root = "_".join([f"{key}={value}" for key, value in exp.items()])
     run_name = f"{run_name_root}"
-    print(f"Runnning experiment: {run_name} with config: {exp}")
+    logger.info(f"Runnning experiment: {run_name} with config: {exp}")
     # if somehow a stray run is active, close it
     if mlflow.active_run() is not None:
         mlflow.end_run()
