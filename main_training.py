@@ -152,6 +152,7 @@ def base_data_prep(
         df_clean,
         tickers=SAMPLE_TICKERS if use_sample_tickers_for_training else None,
         startdate=datetime.datetime.now() - datetime.timedelta(days=365 * 5 + 1),
+        datasource=datasource,
         clean_sample_fdir=clean_sample_fdir,
         access_date_str=access_date_str,
     )

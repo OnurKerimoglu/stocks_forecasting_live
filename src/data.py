@@ -306,7 +306,7 @@ def sample_tickers_dates(
     df_clean: pd.DataFrame,
     tickers: list | None = None,
     startdate: datetime | None = None,
-    source: str = "Kaggle",
+    datasource: str | None = None,
     clean_sample_fdir: str | None = None,
     access_date_str: str | None = None,
 ) -> tuple[pd.DataFrame, str]:
@@ -326,9 +326,8 @@ def sample_tickers_dates(
     startdate : datetime or None, optional
         The start date to sample from the data. If None, all dates are kept.
         Defaults to None.
-    source: src, optional
-        The source of the data.
-        Defaults to 'Kaggle', which indicates that the data was downloaded from Kaggle.
+    datasource: src, optional
+        The source of the data. E.g., 'Kaggle', 'yahoofinance
     clean_sample_fdir : str or None, optional
         Path to the local directory in which the sampled DataFrame will be stored as CSV.
         If None (default), the DataFrame is not written to file.
@@ -363,7 +362,7 @@ def sample_tickers_dates(
     if clean_sample_fdir is not None:
         access_date_suffix = f"Access_{access_date_str}"
         fname_root = (
-            f"{source}_{access_date_suffix}_{ticker_suffix}{sample_date_suffix}"
+            f"{datasource}_{access_date_suffix}_{ticker_suffix}{sample_date_suffix}"
         )
         fpath = store_df_locally(df_clean_sample, fname_root, clean_sample_fdir)
         logger.info(f"Wrote cleaned sample to: {fpath}")
