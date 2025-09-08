@@ -7,6 +7,7 @@ import yfinance as yf
 from statsmodels.tsa.deterministic import CalendarFourier, DeterministicProcess
 
 from gcp_functions import read_file_as_df
+from load_configs import Configs
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -15,15 +16,24 @@ logging.basicConfig(
 
 
 def load_raw_data(
-    datasource: str, rawdatapath: str, user: str, datasetname: str
+    datasource: str,
+    datapath: str,
+    localrun: bool,
+    env: str,
+    user: str,
+    datasetname: str,
 ) -> tuple[pd.DataFrame, str]:
     """
     Loads raw data from given datasource.
     Args:
     datasource: str
-        The source of the raw data. Currently, only 'kaggle' is supported.
+        The source of the raw data. Currently, only 'kaggle' and 'yahoofinance' are supported.
     datapath: str
-        The path where the raw data will be stored.
+        The path where the raw data will be stored
+    localrun: bool
+        Whether the pipeline is running locally or not.
+    env: str
+        The environment in which the pipeline is running.
     user: str
         The username of the user from which the dataset is fetched.
     datasetname: str
@@ -34,9 +44,13 @@ def load_raw_data(
     """
     if datasource == "kaggle":
         df_raw, access_date_str = load_raw_data_from_kaggle(
-            datapath=os.path.join(rawdatapath, "kaggle"),
-            user="nelgiriyewithana",
-            datasetname="world-stock-prices-daily-updating",
+            parentdatapath=datapath,
+            user=user,
+            datasetname=datasetname,
+        )
+    elif datasource == "yahoofinance":
+        df_raw, access_date_str = load_raw_data_from_yf(
+            parentdatapath=datapath, localrun=localrun, env=env
         )
     else:
         raise ValueError(f"Unknown datasource: {datasource}")
@@ -44,8 +58,105 @@ def load_raw_data(
     return df_raw, access_date_str
 
 
+def load_raw_data_from_yf(
+    parentdatapath: str, localrun: bool, env: str
+) -> tuple[pd.DataFrame, str]:
+    """
+    Loads raw data from a specified dataset using yfinance.
+
+    If the merged dataset (csv) file does not exist in the specified local path, it:
+    - reads the ref data to find out each ticker to fetch
+    - fetches the data for each ticker from yfinance
+    - merges the ticker data in a dataframe and stores as a csv file
+    Otherwise it reads the data from the local csv file
+    dataset file. The raw data is returned as a pandas DataFrame.
+
+    Args:
+    parentdatapath : str
+        The directory path where a "yf" folder, and inside which the dataset is expected to be found.
+    localrun: bool
+        If True, the ref data is found in local filesystem, otherwise in cloud
+    env: str
+        Environment (if localrun is false, determines the bucket where the ref data is found)
+
+    Returns:
+    pd.DataFrame
+        A DataFrame containing the raw data from the dataset.
+    access_date_str : str
+        The date string of when the raw data was accessed.
+    """
+    datapath = os.path.join(parentdatapath, "raw", "yf")
+    logger.info(f"yf datapath: {datapath}")
+    os.makedirs(datapath, exist_ok=True)
+
+    raw_fpath_full = os.path.join(datapath, "Stock-Prices-Ref-Dataset_YF.csv")
+    if not os.path.exists(raw_fpath_full):
+        access_date_str = datetime.now().strftime("%Y-%m-%d")
+        logger.info(
+            f"Raw data was not found in location {datapath}, downloading from yf"
+        )
+        # First find out which tickers are needed, by reading the reference data
+        configs = None if localrun else Configs(env)
+        # load reference data
+        ref_data = load_data(
+            localrun,
+            prefix="ref_data_model",
+            fname="data.parquet",
+            project=configs.cloud["gcs"]["project"] if configs else None,
+            bucket=configs.cloud["gcs"]["data_monitoring_bucket"] if configs else None,
+            localrootdir=parentdatapath,
+        )
+        # For each ticker, fetch data from yf, merge and store as a csv file
+        read_merge_store_yf_data(ref_data, raw_fpath_full)
+    else:
+        access_date_timestamp = os.path.getmtime(raw_fpath_full)
+        access_date_str = datetime.fromtimestamp(access_date_timestamp).strftime(
+            "%Y-%m-%d"
+        )
+        logger.info(
+            f"Raw data already found in location {datapath}, last modified on {access_date_str}"
+        )
+    logger.info(f"reading raw data from: {raw_fpath_full}")
+    df_raw = pd.read_csv(raw_fpath_full)
+    df_raw["Date"] = pd.to_datetime(df_raw["Date"], utc=True).dt.tz_convert(None)
+    return df_raw, access_date_str
+
+
+def read_merge_store_yf_data(
+    ref_data: pd.DataFrame, raw_fpath_full: str, fail_tolerance: int = 10
+) -> None:
+    tickers = ref_data["Ticker"].unique()
+    df_raw = None
+    fail_count = 0
+    for i, ticker in enumerate(tickers):
+        try:
+            df_ticker = fetch_ticker_data_from_yf(
+                ticker,
+                fetchperiodinweeks=52 * 4 + 1,  # i.e., 4 years plus 1 week
+            )
+        except ValueError as err:
+            fail_count += 1
+            logger.error(f"Error fetching data for ticker # {i} ({ticker}): {err}")
+        if df_raw is None:
+            df_raw = df_ticker
+        else:
+            df_raw = pd.concat([df_raw, df_ticker])
+    fail_perc = fail_count / len(tickers) * 100
+    succ_perc = 100 - fail_perc
+    if fail_perc > fail_tolerance:
+        raise ValueError(
+            f"Failed to fetch data for {fail_perc:.2f}% (>{fail_tolerance}%) of the tickers found in reference data"
+        )
+    else:
+        logger.info(
+            f"Successfully fetched data for {succ_perc:.2f}% of the tickers found in reference data"
+        )
+    df_raw.to_csv(raw_fpath_full, index=False)
+    return df_raw
+
+
 def load_raw_data_from_kaggle(
-    datapath: str, user: str, datasetname: str
+    parentdatapath: str, user: str, datasetname: str
 ) -> tuple[pd.DataFrame, str]:
     """
     Loads raw data from a specified dataset using the Kaggle API.
@@ -57,8 +168,8 @@ def load_raw_data_from_kaggle(
     dataset file. The raw data is returned as a pandas DataFrame.
 
     Args:
-    datapath : str
-        The directory path where the dataset is stored or will be downloaded.
+    parentdatapath : str
+        The directory path where a "kaggle" folder, and inside which the dataset is expected to be found.
     user : str
         The Kaggle username associated with the dataset.
     datasetname : str
@@ -72,8 +183,8 @@ def load_raw_data_from_kaggle(
     """
     import kaggle
 
-    logger.info(f"datapath: {datapath}")
-
+    datapath = os.path.join(parentdatapath, "raw", "kaggle")
+    logger.info(f"kaggle datapath: {datapath}")
     os.makedirs(datapath, exist_ok=True)
 
     raw_fpath_full = os.path.join(datapath, "World-Stock-Prices-Dataset.csv")
@@ -128,7 +239,7 @@ def fetch_ticker_data_from_yf(
     if df.shape[0] > 0:
         logger.info(f"Fetched {df.shape[0]} rows for {ticker}")
     else:
-        raise ValueError(f"No valid raws in fetched data for {ticker}")
+        raise ValueError(f"No valid rows in fetched data for {ticker}")
     return df
 
 
@@ -570,3 +681,18 @@ def load_data(
         else:
             df = pd.read_parquet(fpath)
     return df
+
+
+if __name__ == "__main__":
+    # load the raw data
+    ROOTPATH = os.path.dirname(os.path.dirname(__file__))
+    DATAPATH = os.path.join(ROOTPATH, "data")
+    df_raw, access_date_str = load_raw_data(
+        # datasource="kaggle",
+        datasource="yahoofinance",
+        datapath=DATAPATH,
+        localrun=False,
+        env="test",
+        user="nelgiriyewithana",
+        datasetname="world-stock-prices-daily-updating",
+    )
