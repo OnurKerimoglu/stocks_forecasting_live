@@ -50,7 +50,7 @@ config:
 ---
  flowchart TB
  subgraph Ext["External Data"]
-        DSource["Kaggle"]
+        DSource["Kaggle/YahooFinance"]
   end
  subgraph Shared["Shared Modules"]
         DataPP["Data Preprocessing"]
@@ -112,7 +112,7 @@ config:
 
 ## Instructions for Reproduction
 ### Prerequisites and Initial Setup
-- The [training dataset](https://www.kaggle.com/datasets/nelgiriyewithana/world-stock-prices-daily-updating/data) will be downloaded with Kaggle API, which requires signing up and creating an API token (see: https://www.kaggle.com/docs/api))
+- The [training dataset](https://www.kaggle.com/datasets/nelgiriyewithana/world-stock-prices-daily-updating/data) will be downloaded either via Yahoo! Finance API (https://pypi.org/project/yfinance/) or Kaggle API (which requires signing up and creating an API token, see: https://www.kaggle.com/docs/api))
 - The installation instructions below assumes availability of uv on your system (https://docs.astral.sh/uv/getting-started/installation/)
 - On a terminal, run:
 ```
@@ -249,7 +249,7 @@ Monitoring is achieved through:
     - issuing `docker compose -f monitoring/docker-compose.yml up` will start running the services. With the default configuration (see [grafana_datasources.yaml](monitoring/config/grafana_datasources.yaml)), Adminer should be accessible on localhost:8085 (with System: PostgreSQL, Username: postgres, Pw: admin, Database: stocks) and Grafana should be accessible on localhost:3000 (with default user: admin and pw:admin).
 2. Data archival: every time the training pipeline is run, the date-sampled & cleaned data is stored in a GCS bucket defined in [gcs.yml](config/gcs.yml)
 3. Establishing the baseline: to define and store the model and data that will form the baseline, the script [establish_baseline.py](monitoring/establish_baseline.py) should be executed by specifying the environment from which the stored model artifacts should be pulled, and the filename for the cleaned and sampled data. This is exemplified in the [Makefile](Makefile) with the `monitoring_establish_baseline` target. This is a manual step so far.
-4. Refreshing the dashboard: to compare a new dataset (e.g., a new pull from Kaggle) against the ref dataset, and predictions generated with the new dataset and the reference model, the script [evidently_dashboard.py](monitoring/evidently_dashboard.py) should be run with the necessary arguments. This is exemplified with a [Makefile](Makefile) target `monitoring_base_refresh` (If you don't have the data with the filename on your system, it won't work)
+4. Refreshing the dashboard: to compare a new dataset (e.g., a new pull from Kaggle or Yahoo! Finance) against the ref dataset, and predictions generated with the new dataset and the reference model, the script [evidently_dashboard.py](monitoring/evidently_dashboard.py) should be run with the necessary arguments. This is exemplified with a [Makefile](Makefile) target `monitoring_base_refresh` (If you don't have the data with the filename on your system, it won't work)
     - localrun: whether the data should be pulled from local filesystem (to set it to False, provide no-localrun instead)
     - env: in which env folder/prefix (i.e., cleaned_samples_dev) the new data is stored
     - fname: file name of the new data (e.g., "Kaggle_Access_2025-07-28_WSPall_from_2020-07-28.parquet")
