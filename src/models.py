@@ -6,6 +6,7 @@ from sklearn.multioutput import RegressorChain
 from xgboost import XGBRegressor
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 def create_fit_xgbregressor_chain(

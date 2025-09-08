@@ -10,9 +10,7 @@ from gcp_functions import read_file_as_df
 from load_configs import Configs
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s [%(levelname)s]: %(message)s"
-)
+logger.setLevel(logging.INFO)
 
 
 def load_raw_data(
@@ -684,6 +682,9 @@ def load_data(
 
 
 if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s [%(levelname)s]: %(message)s"
+    )
     # load the raw data
     ROOTPATH = os.path.dirname(os.path.dirname(__file__))
     DATAPATH = os.path.join(ROOTPATH, "data")
