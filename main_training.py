@@ -50,7 +50,8 @@ mlflow.set_experiment(EXP_NAME)
 @flow(name="stocks_forecasting_training_flow")
 def stocks_forecasting_training_flow(
     env: str = "prod",
-    datasource: str = "kaggle",
+    datasource: str = "yahoofinance",
+    localrun: bool = False,
     use_sample_tickers_for_training: bool = True,
     select_only_latest: bool = True,
 ) -> None:
@@ -96,7 +97,7 @@ def stocks_forecasting_training_flow(
             use_sample_tickers_for_training = False
     clean_sample_fdir = os.path.join(DATAPATH, f"cleaned_samples_{env}")
     df, df_train, df_test = base_data_prep(
-        env, datasource, use_sample_tickers_for_training, clean_sample_fdir
+        datasource, localrun, env, use_sample_tickers_for_training, clean_sample_fdir
     )
 
     # step 2: run experiments (tasks as sub-flow)
@@ -127,15 +128,18 @@ def stocks_forecasting_training_flow(
 # This is a subflow, calling other tasks
 @task(task_run_name="base_data_prep_taskgroup")
 def base_data_prep(
-    env: str,
     datasource: str,
+    localrun: str,
+    env: str,
     use_sample_tickers_for_training: bool,
     clean_sample_fdir: str | None = None,
 ) -> tuple:
     # load the raw data
     df_raw, access_date_str = load_raw_data(
         datasource=datasource,
-        rawdatapath=RAWDATAPATH,
+        datapath=DATAPATH,
+        localrun=localrun,
+        env=env,
         user="nelgiriyewithana",
         datasetname="world-stock-prices-daily-updating",
     )
@@ -267,5 +271,9 @@ def register_best_model(only_latest: bool = True) -> None:
 
 if __name__ == "__main__":
     stocks_forecasting_training_flow(
-        env="dev", use_sample_tickers_for_training=True, select_only_latest=True
+        env="test",
+        datasource="yahoofinance",
+        localrun=True,
+        use_sample_tickers_for_training=True,
+        select_only_latest=True,
     )
