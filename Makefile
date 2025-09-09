@@ -89,13 +89,13 @@ inference_test_raw:
 inference_test_pretty:
 	python scripts/test_inference.py --env ${BRANCH_SIMPLE} --ticker GOOG --past_horizon 5 --endpoint v1/forecast/from_symbol
 
-FNAME_NEW="Kaggle_Access_2025-07-22_WSPall_from_2020-07-22.parquet"
+FNAME_NEW="yahoofinance_Access_2025-09-08_WSPall_from_2020-09-08.parquet"
 ENV_NEW="prod"
 monitoring_establish_baseline:
 	python monitoring/establish_baseline.py --no-localrun --env ${ENV_NEW} --fname ${FNAME_NEW}
 
-FNAME_NEW="Kaggle_Access_2025-07-28_WSPall_from_2020-07-28.parquet"
-ENV_NEW="dev"
+FNAME_NEW="yahoofinance_Access_2025-09-08_WSPall_from_2020-09-08.parquet"
+ENV_NEW="test"
 BACKFILL_HORIZON=20
 monitoring_base_refresh:
 	python monitoring/refresh_monitoring_dashboard.py --no-localrun --env ${ENV_NEW} --fname ${FNAME_NEW} --backfill_horizon ${BACKFILL_HORIZON}
