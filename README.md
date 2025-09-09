@@ -184,13 +184,14 @@ The inference pipeline, i.e., the 'stocks_forecasting_inference_flow' function i
 - runs the champion model (see the next section)
 - returns the forecasts and the requested amount of recent data
 
-The inference service exposes a REST API (implemented with [Flask](https://palletsprojects.com/projects/flask/)) with two POST endpoints: /v1/forecast/from_data and /v1/forecast/from_symbol—for forecasting from user-supplied price data or by ticker symbol, respectively. Here is an overview:
+The inference service exposes a REST API (implemented with [Flask](https://palletsprojects.com/projects/flask/)) with two  POST endpoints: `/v1/forecast/from_data` and `/v1/forecast/from_symbol` - for forecasting from user-supplied price data or by ticker symbol, respectively. Here is an overview:
 
 | Method | Path                        | Description                                                 | Example json payload |
 |:------:|-----------------------------|-------------------------------------------------------------|------------------------|
 | POST   | `/v1/forecast/from_symbol`  | Forecasts by ticker symbol; the service fetches recent data  | ```{"ticker": "AAPL", "past_horizon": 10}``` |
 | POST   | `/v1/forecast/from_data`    | Forecasts using user-provided recent (closing) price data | ```{"ticker": "AAPL", "series": {"date":  ["2025-07-21", "2025-07-22", ...], "close": [231.14,       233.02,      ...]}, "past_horizon": 1}``` |
 
+Besides the POST endpoints, two additional convenience GET endpoints, i.e., `/` (root) and `/healthz` are exposed that provide a summary and health status of the service, respectively.
 See the following sections for the instructions on building, deploying and testing the service.
 
 #### Local Build and Deployment
