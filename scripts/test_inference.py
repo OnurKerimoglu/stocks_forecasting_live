@@ -2,10 +2,10 @@ import logging
 
 import pandas as pd
 import requests
+
 from gcp_functions import get_gcrun_service_url
 from load_configs import Configs
-
-from data import fetch_ticker_data_from_yf
+from raw_data_yf import fetch_ticker_data_from_yf
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(

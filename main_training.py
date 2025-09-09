@@ -13,14 +13,16 @@ from data import (
     build_features,
     clean_raw_data,
     create_X_y_multistep,
+    split_train_test_panel,
+)
+from gcp_functions import upload_file_to_folder
+from load_configs import Configs
+from models import create_fit_xgbregressor_chain, evaluate_all
+from raw_data import (
     load_raw_data,
     remove_raw_data,
     sample_tickers_dates,
-    split_train_test_panel,
 )
-from models import create_fit_xgbregressor_chain, evaluate_all
-from scripts.gcp_functions import upload_file_to_folder
-from scripts.load_configs import Configs
 from utils import get_pipreqs_from_pyproject
 
 # Global parameters
@@ -28,6 +30,7 @@ TARGET = "returns"
 SAMPLE_TICKERS = ["AAPL", "AMZN"]
 ROOTPATH = os.path.dirname(__file__)
 DATAPATH = os.path.join(ROOTPATH, "data")
+RAWDATAPATH = os.path.join(DATAPATH, "raw")
 CONFPATH = os.path.join(ROOTPATH, "config")
 ISODATE = datetime.date.today().isoformat()
 
@@ -42,13 +45,17 @@ mlflow.set_tracking_uri("http://127.0.0.1:5000")
 MODEL_ARTIFACT_FOLDER = "mlflow_models"
 REGISTRY_NAME = "stocks_forecasting_candidates"
 CLIENT = MlflowClient()
-EXPS, EXP_NAME = build_exp_dicts(os.path.join(CONFPATH, "Exp_CldrFeats_ModReg.yaml"))
+EXPS, EXP_NAME = build_exp_dicts(
+    os.path.join(CONFPATH, "Exp_CldrFeats_ModReg.yaml")  # _test
+)
 mlflow.set_experiment(EXP_NAME)
 
 
 @flow(name="stocks_forecasting_training_flow")
 def stocks_forecasting_training_flow(
     env: str = "prod",
+    datasource: str = "yahoofinance",
+    localrun: bool = False,
     use_sample_tickers_for_training: bool = True,
     select_only_latest: bool = True,
 ) -> None:
@@ -78,8 +85,12 @@ def stocks_forecasting_training_flow(
         whether to select only the latest model under the experiments, i.e., from today
     """
     logger = get_run_logger()
-
-    assert env in ["test", "dev", "prod"]
+    try:
+        assert env in ["test", "dev", "prod"]
+    except Exception as err:
+        raise ValueError(
+            f"env must be one of ['test', 'dev', 'prod'], but got {env}"
+        ) from err
 
     # step1: base data prep (task as sub-flow)
     if env in ["dev", "prod"]:
@@ -90,7 +101,7 @@ def stocks_forecasting_training_flow(
             use_sample_tickers_for_training = False
     clean_sample_fdir = os.path.join(DATAPATH, f"cleaned_samples_{env}")
     df, df_train, df_test = base_data_prep(
-        env, use_sample_tickers_for_training, clean_sample_fdir
+        datasource, localrun, env, use_sample_tickers_for_training, clean_sample_fdir
     )
 
     # step 2: run experiments (tasks as sub-flow)
@@ -107,7 +118,7 @@ def stocks_forecasting_training_flow(
 
     # step 4: cleanup (task)
     if env in ["dev", "prod"]:
-        remove_raw_data(DATAPATH)
+        remove_raw_data(RAWDATAPATH, datasource)
         logger.info(f"Running in a primary env {env}, therefore removing raw data")
     else:
         # Not removing the raw data in non-primary envs to enable fast test runs
@@ -121,13 +132,18 @@ def stocks_forecasting_training_flow(
 # This is a subflow, calling other tasks
 @task(task_run_name="base_data_prep_taskgroup")
 def base_data_prep(
+    datasource: str,
+    localrun: str,
     env: str,
     use_sample_tickers_for_training: bool,
     clean_sample_fdir: str | None = None,
 ) -> tuple:
     # load the raw data
     df_raw, access_date_str = load_raw_data(
+        datasource=datasource,
         datapath=DATAPATH,
+        localrun=localrun,
+        env=env,
         user="nelgiriyewithana",
         datasetname="world-stock-prices-daily-updating",
     )
@@ -138,6 +154,7 @@ def base_data_prep(
         df_clean,
         tickers=SAMPLE_TICKERS if use_sample_tickers_for_training else None,
         startdate=datetime.datetime.now() - datetime.timedelta(days=365 * 5 + 1),
+        datasource=datasource,
         clean_sample_fdir=clean_sample_fdir,
         access_date_str=access_date_str,
     )
@@ -159,7 +176,7 @@ def run_single_experiment(
     logger = get_run_logger()
     run_name_root = "_".join([f"{key}={value}" for key, value in exp.items()])
     run_name = f"{run_name_root}"
-    print(f"Runnning experiment: {run_name} with config: {exp}")
+    logger.info(f"Runnning experiment: {run_name} with config: {exp}")
     # if somehow a stray run is active, close it
     if mlflow.active_run() is not None:
         mlflow.end_run()
@@ -259,5 +276,9 @@ def register_best_model(only_latest: bool = True) -> None:
 
 if __name__ == "__main__":
     stocks_forecasting_training_flow(
-        env="dev", use_sample_tickers_for_training=True, select_only_latest=True
+        env="test",
+        datasource="yahoofinance",
+        localrun=True,
+        use_sample_tickers_for_training=True,
+        select_only_latest=True,
     )

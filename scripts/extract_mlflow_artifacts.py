@@ -4,9 +4,10 @@ import json
 import os
 
 import mlflow
+from mlflow.tracking import MlflowClient
+
 from gcp_functions import clear_gcs_folder, upload_directory
 from load_configs import Configs
-from mlflow.tracking import MlflowClient
 
 # Global parameters
 mlflow.set_tracking_uri("http://127.0.0.1:5000")

@@ -5,15 +5,12 @@ from pickle import load as pload
 
 import pandas as pd
 
-from data import (
-    build_features,
-    create_X_y_multistep,
-)
-from scripts.gcp_functions import (
+from data import build_features, create_X_y_multistep
+from gcp_functions import (
     load_json_from_gcs,
     load_pickle_from_gcs,
-    read_file_as_df,
 )
+from raw_data import load_data
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -53,31 +50,6 @@ def load_model_artifacts(
     return ref_params, ref_estimator
 
 
-def load_data(
-    localrun: bool,
-    prefix: str,
-    fname: str,
-    project: str | None,
-    bucket: str | None,
-    localrootdir: str | None = None,
-) -> pd.DataFrame:
-    if not localrun:
-        # Load the df from GCS
-        logger.info(f"Loading data from GCS bucket: {bucket}")
-        df = read_file_as_df(project, bucket, f"{prefix}/{fname}")
-    else:
-        # Read from the local filesystem
-        fpath = os.path.join(localrootdir, prefix, fname)
-        logger.info(f"Loading data from filesystem: {fpath}")
-        if not os.path.exists(fpath):
-            raise Exception(
-                f"no config provided for GCS and local path {fpath} does not exist"
-            )
-        else:
-            df = pd.read_parquet(fpath)
-    return df
-
-
 def prepare_data_for_monitoring(
     configs: dict,
     env: str,
@@ -98,8 +70,10 @@ def prepare_data_for_monitoring(
         localrootdir=localrootdir,
     )
     logger.info("Creating data with features, target and predictions")
+    CldrFeats = params["CldrFeats"] if "CldrFeats" in params.keys() else "True"
+    CldrFeats = True if CldrFeats == "True" else False
     df_feats, _features2scale = build_features(
-        df, lags=int(params["lags"]), CldrFeats=params["CldrFeats"]
+        df, lags=int(params["lags"]), CldrFeats=CldrFeats
     )
     X, y = create_X_y_multistep(df_feats, steps=int(params["steps"]), target=target)
     y_hat = estimator.predict(X)

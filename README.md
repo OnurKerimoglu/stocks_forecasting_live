@@ -50,7 +50,7 @@ config:
 ---
  flowchart TB
  subgraph Ext["External Data"]
-        DSource["Kaggle"]
+        DSource["Kaggle/YahooFinance"]
   end
  subgraph Shared["Shared Modules"]
         DataPP["Data Preprocessing"]
@@ -112,7 +112,7 @@ config:
 
 ## Instructions for Reproduction
 ### Prerequisites and Initial Setup
-- The [training dataset](https://www.kaggle.com/datasets/nelgiriyewithana/world-stock-prices-daily-updating/data) will be downloaded with Kaggle API, which requires signing up and creating an API token (see: https://www.kaggle.com/docs/api))
+- The [training dataset](https://www.kaggle.com/datasets/nelgiriyewithana/world-stock-prices-daily-updating/data) will be downloaded either via Yahoo! Finance API (https://pypi.org/project/yfinance/) or Kaggle API (which requires signing up and creating an API token, see: https://www.kaggle.com/docs/api))
 - The installation instructions below assumes availability of uv on your system (https://docs.astral.sh/uv/getting-started/installation/)
 - On a terminal, run:
 ```
@@ -184,13 +184,14 @@ The inference pipeline, i.e., the 'stocks_forecasting_inference_flow' function i
 - runs the champion model (see the next section)
 - returns the forecasts and the requested amount of recent data
 
-The inference service exposes a REST API (implemented with [Flask](https://palletsprojects.com/projects/flask/)) with two POST endpoints: /v1/forecast/from_data and /v1/forecast/from_symbol—for forecasting from user-supplied price data or by ticker symbol, respectively. Here is an overview:
+The inference service exposes a REST API (implemented with [Flask](https://palletsprojects.com/projects/flask/)) with two  POST endpoints: `/v1/forecast/from_data` and `/v1/forecast/from_symbol` - for forecasting from user-supplied price data or by ticker symbol, respectively. Here is an overview:
 
 | Method | Path                        | Description                                                 | Example json payload |
 |:------:|-----------------------------|-------------------------------------------------------------|------------------------|
 | POST   | `/v1/forecast/from_symbol`  | Forecasts by ticker symbol; the service fetches recent data  | ```{"ticker": "AAPL", "past_horizon": 10}``` |
 | POST   | `/v1/forecast/from_data`    | Forecasts using user-provided recent (closing) price data | ```{"ticker": "AAPL", "series": {"date":  ["2025-07-21", "2025-07-22", ...], "close": [231.14,       233.02,      ...]}, "past_horizon": 1}``` |
 
+Besides the POST endpoints, two additional convenience GET endpoints, i.e., `/` (root) and `/healthz` are exposed that provide a summary and health status of the service, respectively.
 See the following sections for the instructions on building, deploying and testing the service.
 
 #### Local Build and Deployment
@@ -244,17 +245,16 @@ Example: assuming that a deployment has been made from a non-primary (anything o
 
 ### Monitoring
 Monitoring is achieved through:
-1. Building and running the services (only once):
-    - issuing `docker compose -f monitoring/docker-compose.yml build` will build the docker images of all necessary services ([Grafana](https://grafana.com/) as the dashboarding tool, a [Postgres](https://www.postgresql.org/) DB and [Adminer](https://www.adminer.org) as the DB management tool, see: [docker-compose.yml](monitoring/docker-compose.yaml))
-    - issuing `docker compose -f monitoring/docker-compose.yml up` will start running the services. With the default configuration (see [grafana_datasources.yaml](monitoring/config/grafana_datasources.yaml)), Adminer should be accessible on localhost:8085 (with System: PostgreSQL, Username: postgres, Pw: admin, Database: stocks) and Grafana should be accessible on localhost:3000 (with default user: admin and pw:admin).
-2. Data archival: every time the training pipeline is run, the date-sampled & cleaned data is stored in a GCS bucket defined in [gcs.yml](config/gcs.yml)
-3. Establishing the baseline: to define and store the model and data that will form the baseline, the script [establish_baseline.py](monitoring/establish_baseline.py) should be executed by specifying the environment from which the stored model artifacts should be pulled, and the filename for the cleaned and sampled data. This is exemplified in the [Makefile](Makefile) with the `monitoring_establish_baseline` target. This is a manual step so far.
-4. Refreshing the dashboard: to compare a new dataset (e.g., a new pull from Kaggle) against the ref dataset, and predictions generated with the new dataset and the reference model, the script [evidently_dashboard.py](monitoring/evidently_dashboard.py) should be run with the necessary arguments. This is exemplified with a [Makefile](Makefile) target `monitoring_base_refresh` (If you don't have the data with the filename on your system, it won't work)
+1. Building the services (only once): issuing `docker compose -f monitoring/docker-compose.yml build` will build the docker images of all necessary services ([Grafana](https://grafana.com/) as the dashboarding tool, a [Postgres](https://www.postgresql.org/) DB and [Adminer](https://www.adminer.org) as the DB management tool, see: [docker-compose.yml](monitoring/docker-compose.yaml))
+2. Running the services: issuing `docker compose -f monitoring/docker-compose.yml up` will start running the services. With the default configuration (see [grafana_datasources.yaml](monitoring/config/grafana_datasources.yaml)), Adminer should be accessible on localhost:8085 (with System: PostgreSQL, Username: postgres, Pw: admin, Database: stocks) and Grafana should be accessible on localhost:3000 (with default user: admin and pw:admin).
+3. Data archival: every time the training pipeline is run, the date-sampled & cleaned data is stored in a GCS bucket defined in [gcs.yml](config/gcs.yml)
+4. Establishing the baseline: to define and store the model and data that will form the baseline, the script [establish_baseline.py](monitoring/establish_baseline.py) should be executed by specifying the environment from which the stored model artifacts should be pulled, and the filename for the cleaned and sampled data. This is exemplified in the [Makefile](Makefile) with the `monitoring_establish_baseline` target. This is a manual step so far.
+5. Refreshing the dashboard: to compare a new dataset (e.g., a new pull from Kaggle or Yahoo! Finance) against the ref dataset, and predictions generated with the new dataset and the reference model, the script [evidently_dashboard.py](monitoring/evidently_dashboard.py) should be run with the necessary arguments. This is exemplified with a [Makefile](Makefile) target `monitoring_base_refresh` (If you don't have the data with the filename on your system, it won't work)
     - localrun: whether the data should be pulled from local filesystem (to set it to False, provide no-localrun instead)
     - env: in which env folder/prefix (i.e., cleaned_samples_dev) the new data is stored
     - fname: file name of the new data (e.g., "Kaggle_Access_2025-07-28_WSPall_from_2020-07-28.parquet")
     - backfill_horizon: number of (business) days (backwards from the last available date) monitoring dashboard should be refreshed for
-5. Inspection of results: in Grafana -> Dashboards -> a dashboard named 'Base Monitoring' (sourced from [base_monitoring.json](monitoring/dashboards/base_monitoring.json))  will be available, that should look like:
+6. Inspection of results: in Grafana -> Dashboards -> a dashboard named 'Base Monitoring' (sourced from [base_monitoring.json](monitoring/dashboards/base_monitoring.json))  will be available, that should look like:
 <img src="documentation/images/grafana_base_dashboard.png" width=500 />
 
 ## License
