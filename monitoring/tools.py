@@ -69,8 +69,10 @@ def prepare_data_for_monitoring(
         localrootdir=localrootdir,
     )
     logger.info("Creating data with features, target and predictions")
+    CldrFeats = params["CldrFeats"] if "CldrFeats" in params.keys() else "True"
+    CldrFeats = True if CldrFeats == "True" else False
     df_feats, _features2scale = build_features(
-        df, lags=int(params["lags"]), CldrFeats=params["CldrFeats"]
+        df, lags=int(params["lags"]), CldrFeats=CldrFeats
     )
     X, y = create_X_y_multistep(df_feats, steps=int(params["steps"]), target=target)
     y_hat = estimator.predict(X)

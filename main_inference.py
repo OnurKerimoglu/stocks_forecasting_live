@@ -110,8 +110,9 @@ def run_forecast(
     bizday_offset: bool = True,
     past_horizon: int = 1,
 ) -> tuple:
-    # Build features on your last observed history
-    CldrFeats = parameters["CldrFeats"] if "CldrFeats" in parameters.keys() else True
+    # Build features on recent history
+    CldrFeats = parameters["CldrFeats"] if "CldrFeats" in parameters.keys() else "True"
+    CldrFeats = True if CldrFeats == "True" else False
     df_feats, _ = build_features(
         df_init, lags=int(parameters["lags"]), CldrFeats=CldrFeats
     )
