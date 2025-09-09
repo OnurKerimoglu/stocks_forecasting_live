@@ -94,7 +94,7 @@ ENV_NEW="prod"
 monitoring_establish_baseline:
 	python monitoring/establish_baseline.py --no-localrun --env ${ENV_NEW} --fname ${FNAME_NEW}
 
-FNAME_NEW="yahoofinance_Access_2025-09-08_WSPall_from_2020-09-08.parquet"
+FNAME_NEW="yahoofinance_Access_2025-09-09_WSPall_from_2020-09-09.parquet"
 ENV_NEW="test"
 BACKFILL_HORIZON=20
 monitoring_base_refresh:
