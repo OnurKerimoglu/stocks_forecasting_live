@@ -3,6 +3,7 @@ import json
 import logging
 import os
 import pickle
+from datetime import UTC, datetime
 
 import mlflow
 import numpy as np
@@ -283,8 +284,30 @@ def forecast_endpoint_from_series() -> dict:
     return result
 
 
+@app.get("/healthz")
+def healthz() -> tuple:
+    return jsonify({
+        "status": "ok",
+        "service": "stocks-forecasting",
+        "version": "v1",
+        "time": datetime.now(UTC).isoformat(),
+    }), 200
+
+
+@app.get("/")
+def index() -> tuple:
+    return jsonify({
+        "message": "stocks-forecasting API",
+        "health": "/healthz",
+        "endpoints": [
+            {"path": "/v1/forecast/from_symbol", "method": "POST"},
+            {"path": "/v1/forecast/from_data", "method": "POST"},
+        ],
+    }), 200
+
+
 # if __name__ == "__main__":
-#     stocks_forecasting_inference_flow(
-#         ticker="AAPL", use_model_registry=False, past_horizon=5
-#     )
-# app.run(debug=True, host="0.0.0.0", port=9696)
+#     app.run(debug=True, host="0.0.0.0", port=9696)
+#     # stocks_forecasting_inference_flow(
+#     #     ticker="AAPL", use_model_registry=False, past_horizon=5
+#     # )
