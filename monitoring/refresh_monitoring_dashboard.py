@@ -12,8 +12,8 @@ from evidently import DataDefinition, Dataset, Report
 from evidently.metrics import DriftedColumnsCount, MissingValueCount, ValueDrift
 from tools import load_model_artifacts, prepare_data_for_monitoring
 
-from data import load_data
 from load_configs import Configs
+from raw_data import load_data
 
 warnings.simplefilter(action="ignore", category=FutureWarning)
 warnings.simplefilter(action="ignore", category=RuntimeWarning)

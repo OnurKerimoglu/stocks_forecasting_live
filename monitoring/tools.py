@@ -5,11 +5,12 @@ from pickle import load as pload
 
 import pandas as pd
 
-from data import build_features, create_X_y_multistep, load_data
+from data import build_features, create_X_y_multistep
 from gcp_functions import (
     load_json_from_gcs,
     load_pickle_from_gcs,
 )
+from raw_data import load_data
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
