@@ -203,7 +203,7 @@ def main() -> None:
     if st.sidebar.button("Fetch & Plot"):
         with st.spinner("Contacting API…"):
             try:
-                if env != "prod":
+                if debug_flag:
                     st.write(f"Calling API for {env} env")
                 payload = call_api(ticker, past_horizon, env, endpoint)
                 data = payload["data"]
