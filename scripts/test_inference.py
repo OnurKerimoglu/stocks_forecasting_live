@@ -1,4 +1,6 @@
 import logging
+import sys
+import uuid
 
 import pandas as pd
 import requests
@@ -13,23 +15,45 @@ logging.basicConfig(
 )
 
 
-def main(env: str, ticker: str, past_horizon: int, endpoint: str) -> None:
+def main(
+    env: str, ticker: str, past_horizon: int, endpoint: str, signature_name: str
+) -> None:
     # Find the correct URL for the specified environment
     url = find_url_for_env(env, endpoint)
 
     # Send the request
-    if endpoint.split("/")[-1] in ["from_symbol"]:
-        logger.info(f"Sending the ticker symmbol to the {endpoint} endpoint")
-        pl_in = {"ticker": ticker, "past_horizon": past_horizon}
-    elif endpoint.split("/")[-1] in ["from_data"]:
-        logger.info(f"Fetching ticker data and sending it to the {endpoint} endpoint")
-        pl_in = build_payload_with_data(ticker=ticker, past_horizon=past_horizon)
-    resp = requests.post(url, json=pl_in)
-    pl_out = resp.json()
+    if endpoint.split("/")[-1] in ["from_symbol", "from_data"]:
+        pl_out = legacy_api_handler(url, endpoint, ticker, past_horizon)
+    elif "/" in endpoint:
+        logger.info(f"Sending the ticker symbol to the {endpoint} endpoint")
+        if signature_name == "from_symbol":
+            pl_in = {
+                "ticker": ticker,
+                "past_horizon": past_horizon,
+                "signature_name": signature_name,
+            }
+        elif signature_name == "from_data":
+            try:
+                pl_in = build_payload_with_data(
+                    ticker=ticker,
+                    past_horizon=past_horizon,
+                    signature_name=signature_name,
+                )
+            except ValueError as e:
+                logger.error(f"Fetching ticker data failed: {e}")
+                sys.exit(2)
+        try:
+            pl_out = post_json(url, pl_in)
+        except ApiError as e:
+            logger.error(f"API call failed: {e}")
+            sys.exit(2)
+    else:
+        raise ValueError(f"Unrecognized endpoint: {endpoint}")
 
+    meta = pl_out.get("meta", {})
     # Build DataFrames
-    past_df = pd.DataFrame.from_records(pl_out["past"])
-    forecast_df = pd.DataFrame.from_records(pl_out["forecast"])
+    past_df = pd.DataFrame.from_records(pl_out["data"]["past"])
+    forecast_df = pd.DataFrame.from_records(pl_out["data"]["forecast"])
 
     # Parse dates, set index, and convert returns → percent strings
     for df in (past_df, forecast_df):
@@ -44,10 +68,35 @@ def main(env: str, ticker: str, past_horizon: int, endpoint: str) -> None:
             df.drop(columns="Returns", inplace=True)
 
     # Print with nicer formatting
+    print("\n=== META ===")
+    print(meta)
     print("\n=== PAST PRICES ===")
     print(past_df.round({"Close": 2}))
     print("\n=== FORECAST ===")
     print(forecast_df.round({"Close": 2, "Returns": 6}))
+
+
+def legacy_api_handler(
+    url: str, endpoint: str, ticker: str, past_horizon: int
+) -> tuple:
+    if endpoint.split("/")[-1] in ["from_symbol"]:  # backward compatibility for API v1
+        logger.info(f"Sending the ticker symbol to the {endpoint} endpoint")
+        pl_in = {"ticker": ticker, "past_horizon": past_horizon}
+    elif endpoint.split("/")[-1] in ["from_data"]:  # backward compatibility for API v1
+        logger.info(f"Fetching ticker data and sending it to the {endpoint} endpoint")
+        pl_in = build_payload_with_data(ticker=ticker, past_horizon=past_horizon)
+
+    resp = requests.post(url, json=pl_in)
+    pl_out = resp.json()
+
+    # This is the new output format of v2
+    data = {
+        "past": pl_out["past"],
+        "forecast": pl_out["forecast"],
+    }
+    pl_out_new = {"data": data, "meta": pl_out["meta"]}
+
+    return pl_out_new
 
 
 def find_url_for_env(env: str, endpoint: str) -> str:
@@ -56,7 +105,6 @@ def find_url_for_env(env: str, endpoint: str) -> str:
     if env == "local":
         url = f"http://0.0.0.0:9696/{endpoint}"
     else:
-        # url = get_static_url_for_env(env)
         configs = Configs(env).cloud
         service_name_root = configs["gcs"]["service_name_root"]
         url_root = get_gcrun_service_url(
@@ -69,12 +117,9 @@ def find_url_for_env(env: str, endpoint: str) -> str:
     return url
 
 
-def get_static_url_for_env(env: str) -> str:
-    url = f"https://stocks-forecasting-service-{env}-qlypn5u2fq-ew.a.run.app"
-    return url
-
-
-def build_payload_with_data(ticker: str, past_horizon: int) -> dict:
+def build_payload_with_data(
+    ticker: str, past_horizon: int, signature_name: str = "NA"
+) -> dict:
     """
     Fetches data via with fetch_ticker_data_from_yf(ticker)
     and returns the columnar JSON dict expected by the /from_data endpoint.
@@ -101,8 +146,70 @@ def build_payload_with_data(ticker: str, past_horizon: int) -> dict:
             "close": df["Close"].astype(float).tolist(),
         },
         "past_horizon": past_horizon,
+        "signature_name": signature_name,
     }
     return payload
+
+
+class ApiError(Exception):
+    def __init__(
+        self,
+        status: int,
+        title: str,
+        detail: str,
+        request_id: str | None = None,
+        body: dict | None = None,
+    ) -> None:
+        super().__init__(f"{status} {title}: {detail} (request_id={request_id})")
+        self.status = status
+        self.title = title
+        self.detail = detail
+        self.request_id = request_id
+        self.body = body
+
+
+def post_json(
+    url: str,
+    payload: dict,
+    *,
+    request_id: str | None = None,
+    timeout: float = 30.0,
+    session: requests.Session | None = None,
+) -> dict:
+    """POST JSON, include/echo X-Request-ID, raise ApiError on non-2xx."""
+    rid = request_id or str(uuid.uuid4())
+    headers = {
+        "Accept": "application/json, application/problem+json",
+        "X-Request-ID": rid,
+    }
+    http = session or requests
+    resp = http.post(url, json=payload, headers=headers, timeout=timeout)
+
+    server_rid = resp.headers.get("X-Request-ID", "Unknown")
+    try:
+        resp.raise_for_status()
+    except requests.HTTPError as e:
+        # Try to parse RFC-7807 or generic JSON; fall back to text
+        try:
+            body = resp.json()
+        except ValueError:
+            body = {"detail": resp.text}
+        raise ApiError(
+            status=resp.status_code,
+            title=body.get("title", "HTTP Error"),
+            detail=body.get("detail", ""),
+            request_id=server_rid,
+            body=body,
+        ) from e
+
+    # Success: return JSON
+    data = resp.json()
+    if isinstance(data, dict):
+        meta = data.setdefault("meta", {})
+        # if meta doesn't contain request_id, inject server_rid read from the header
+        if "request_id" not in meta:
+            meta["request_id"] = server_rid
+    return data
 
 
 if __name__ == "__main__":
@@ -136,10 +243,20 @@ if __name__ == "__main__":
         "--endpoint",
         type=str,
         required=False,
-        help="forecasting endpoint",  # options: forecast/from_symbol, forecast/from_series
+        help="forecasting endpoint; options: forecast, forecast/from_symbol, forecast/from_series",
+        # default="v2/forecast"
         default="v1/forecast/from_data",
         # default="v1/forecast/from_symbol",
     )
+    parser.add_argument(
+        "--signature_name",
+        type=str,
+        required=False,
+        help="signature name, options: from_symbol, from_data",
+        default="from_symbol",
+        # default="from_data",
+    )
+
     args = parser.parse_args()
 
     main(
@@ -147,4 +264,5 @@ if __name__ == "__main__":
         ticker=args.ticker,
         past_horizon=args.past_horizon,
         endpoint=args.endpoint,
+        signature_name=args.signature_name,
     )
