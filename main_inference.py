@@ -45,21 +45,24 @@ def stocks_forecasting_inference_flow(
     past_horizon: int = 1,
 ) -> None:
     if use_model_registry:
-        model, params = retrieve_registered_model()
+        model, params, metadata = retrieve_registered_model()
     else:
-        model, params = retrieve_locally_stored_model()
+        model, params, metadata = retrieve_locally_stored_model()
     if data_dict is None:
         df_init = retrieve_ticker_data(ticker)
     else:
         df_init = handle_series_data(data_dict, ticker)
     past, forecast = run_forecast(model, params, df_init, past_horizon=past_horizon)
     logger.info(f"\npast:\n{past}\nforecast:\n{forecast}")
-    meta = {  # todo: retrieve missing metadata from registry/storage
-        "model_alias": MODEL_ALIAS,
-        "model_exp_params": params,
-        "model_version": "unknown",
-        "model_trained_at": "unknown",
-        "model_scores": "unknown",
+    meta = {
+        "model_registry_name": metadata["registry_name"],
+        "model_alias": metadata["model_alias"],
+        "model_version": metadata["version"],
+        "model_run_id": metadata["run_id"],
+        "model_uri": metadata["run_info"]["_artifact_uri"],
+        "model_commit_id": metadata["tags"]["mlflow.source.git.commit"],
+        "model_trained_at": metadata["tags"]["run_date"],
+        "params": params,
     }
     return past, forecast, meta
 
@@ -73,7 +76,25 @@ def retrieve_registered_model() -> tuple:
     mv = CLIENT.get_model_version_by_alias(name=REGISTRY_NAME, alias=MODEL_ALIAS)
     run = CLIENT.get_run(mv.run_id)
     params = run.data.params
-    return model, params
+    metadata = extract_metadata(
+        mv.run_id, run.info.__dict__, run.data.tags, run.data.metrics
+    )
+    metadata["aliases"] = "-".join(mv.aliases)
+    metadata["version"] = mv.version
+    return model, params, metadata
+
+
+def extract_metadata(
+    run_id: str, run_info: dict, run_tags: dict, run_metrics: dict
+) -> dict:
+    metadata = {}
+    metadata["registry_name"] = REGISTRY_NAME
+    metadata["model_alias"] = MODEL_ALIAS
+    metadata["run_id"] = run_id
+    metadata["run_info"] = run_info
+    metadata["tags"] = run_tags
+    metadata["metrics"] = run_metrics
+    return metadata
 
 
 def retrieve_locally_stored_model() -> tuple:
@@ -85,7 +106,11 @@ def retrieve_locally_stored_model() -> tuple:
     logger.info(f"Loading params from: {fpath}")
     with open(fpath) as f:
         params = json.load(f)
-    return model, params
+    fpath = os.path.join(MODELPATH, "metadata.json")
+    logger.info(f"Loading metadata from: {fpath}")
+    with open(fpath) as f:
+        metadata = json.load(f)
+    return model, params, metadata
 
 
 def handle_series_data(data_dict: dict, ticker: str) -> pd.DataFrame:
