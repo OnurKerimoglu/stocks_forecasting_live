@@ -41,6 +41,8 @@ def retrieve_registered_model() -> tuple:
     metadata = extract_metadata(
         run_id, run.info.__dict__, run.data.tags, run.data.metrics
     )
+    metadata["aliases"] = "-".join(mv.aliases)
+    metadata["version"] = mv.version
     return run_id, params, metadata
 
 
@@ -129,3 +131,4 @@ if __name__ == "__main__":
     parser.set_defaults(feature=True)
     args = parser.parse_args()
     main_extract_model(env=args.env, cloudupload=args.cloudupload)
+    # main_extract_model(env="test", cloudupload=False)
