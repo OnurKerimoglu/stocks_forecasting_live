@@ -87,7 +87,7 @@ inference_test_raw:
 	  -d '{"ticker":"GOOG", "past_horizon": 5}'
 
 inference_test_pretty:
-	python scripts/test_inference.py --env ${BRANCH_SIMPLE} --ticker GOOG --past_horizon 5 --endpoint v1/forecast/from_symbol
+	python scripts/test_inference.py --env ${BRANCH_SIMPLE} --ticker GOOG --past_horizon 5 --endpoint v2/forecast --signature_name from_symbol
 
 FNAME_NEW="yahoofinance_Access_2025-09-08_WSPall_from_2020-09-08.parquet"
 ENV_NEW="prod"
