@@ -1,3 +1,5 @@
+import uuid
+
 import pandas as pd
 import plotly.graph_objects as go
 import requests
@@ -10,14 +12,84 @@ def call_api(ticker: str, past_horizon: int, env: str, endpoint: str) -> dict:
     else:
         API_URL_TEMPLATE = st.secrets["global"]["API_URL_TEMPLATE"]
         API_URL = API_URL_TEMPLATE.replace("ENV", env)
-    pl_in = {"ticker": ticker, "past_horizon": past_horizon}
-    resp = requests.post(f"{API_URL}/{endpoint}", json=pl_in, timeout=30)
-    resp.raise_for_status()
-    pl_out = resp.json()
+    if "v1" in endpoint:
+        pl_in = {"ticker": ticker, "past_horizon": past_horizon}
+    elif "v2" in endpoint:
+        pl_in = {
+            "ticker": ticker,
+            "past_horizon": past_horizon,
+            "signature_name": "from_symbol",
+        }
+    # resp = requests.post(f"{API_URL}/{endpoint}", json=pl_in, timeout=30)
+    # resp.raise_for_status()
+    # pl_out = resp.json()
+    print(f"Sending request to: {API_URL}/{endpoint}")
+    pl_out = post_json(f"{API_URL}/{endpoint}", pl_in)
     return pl_out
 
 
-def build_chart(data: dict, ticker: str) -> go.Figure:
+class ApiError(Exception):
+    def __init__(
+        self,
+        status: int,
+        title: str,
+        detail: str,
+        request_id: str | None = None,
+        body: dict | None = None,
+    ) -> None:
+        super().__init__(f"{status} {title}: {detail} (request_id={request_id})")
+        self.status = status
+        self.title = title
+        self.detail = detail
+        self.request_id = request_id
+        self.body = body
+
+
+def post_json(
+    url: str,
+    payload: dict,
+    *,
+    request_id: str | None = None,
+    timeout: float = 30.0,
+    session: requests.Session | None = None,
+) -> dict:
+    """POST JSON, include/echo X-Request-ID, raise ApiError on non-2xx."""
+    rid = request_id or str(uuid.uuid4())
+    headers = {
+        "Accept": "application/json, application/problem+json",
+        "X-Request-ID": rid,
+    }
+    http = session or requests
+    resp = http.post(url, json=payload, headers=headers, timeout=timeout)
+
+    server_rid = resp.headers.get("X-Request-ID", "Unknown")
+    try:
+        resp.raise_for_status()
+    except requests.HTTPError as e:
+        # Try to parse RFC-7807 or generic JSON; fall back to text
+        try:
+            body = resp.json()
+        except ValueError:
+            body = {"detail": resp.text}
+        raise ApiError(
+            status=resp.status_code,
+            title=body.get("title", "HTTP Error"),
+            detail=body.get("detail", ""),
+            request_id=server_rid,
+            body=body,
+        ) from e
+
+    # Success: return JSON
+    data = resp.json()
+    if isinstance(data, dict):
+        meta = data.setdefault("meta", {})
+        # if meta doesn't contain request_id, inject server_rid read from the header
+        if "request_id" not in meta:
+            meta["request_id"] = server_rid
+    return data
+
+
+def build_chart(data: dict, meta: dict, ticker: str) -> go.Figure:
     """Create a Plotly figure with past and forecast 'Close' prices."""
     # Convert to DataFrame & ensure datetime index
     past_df = pd.DataFrame(data["past"]).rename(columns={"index": "Date"})
@@ -127,13 +199,18 @@ def main() -> None:
     past_horizon = 20
     env = st.secrets["global"]["env"]
     endpoint = st.secrets["global"]["endpoint"]
-
+    debug_flag = st.secrets["global"]["debug"]
     if st.sidebar.button("Fetch & Plot"):
         with st.spinner("Contacting API…"):
             try:
-                st.write(f"Calling API for {env} env")
+                if env != "prod":
+                    st.write(f"Calling API for {env} env")
                 payload = call_api(ticker, past_horizon, env, endpoint)
-                fig = build_chart(payload, ticker)
+                data = payload["data"]
+                meta = payload.get("meta", None)
+                if debug_flag and meta is not None:
+                    st.write(f"Model metadata: {meta}")
+                fig = build_chart(data, meta, ticker)
                 st.plotly_chart(fig, use_container_width=False)
             except requests.HTTPError as e:
                 st.error(f"API request failed: {e}")
