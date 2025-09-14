@@ -3,22 +3,26 @@ import json
 import logging
 import os
 import pickle
+import uuid
+from datetime import UTC, datetime
 
 import mlflow
 import numpy as np
 import pandas as pd
-from flask import Flask, abort, jsonify, request
+from flask import Flask, Response, abort, g, jsonify, make_response, request
 from mlflow.tracking import MlflowClient
+from werkzeug.exceptions import BadRequest, HTTPException
 from xgboost import XGBRegressor
 
 from data import (
     build_features,
     clean_raw_data,
     create_X_y_multistep,
-    fetch_ticker_data_from_yf,
 )
+from raw_data_yf import fetch_ticker_data_from_yf
 
 # Global parameters
+SERVICE_VERSION = "forecast-api@0.2.0"
 mlflow.set_tracking_uri("http://127.0.0.1:5000")
 CLIENT = MlflowClient()
 MODEL_ARTIFACT_FOLDER = "mlflow_models"
@@ -41,16 +45,26 @@ def stocks_forecasting_inference_flow(
     past_horizon: int = 1,
 ) -> None:
     if use_model_registry:
-        model, params = retrieve_registered_model()
+        model, params, metadata = retrieve_registered_model()
     else:
-        model, params = retrieve_locally_stored_model()
+        model, params, metadata = retrieve_locally_stored_model()
     if data_dict is None:
         df_init = retrieve_ticker_data(ticker)
     else:
         df_init = handle_series_data(data_dict, ticker)
     past, forecast = run_forecast(model, params, df_init, past_horizon=past_horizon)
     logger.info(f"\npast:\n{past}\nforecast:\n{forecast}")
-    return past, forecast
+    meta = {
+        "model_registry_name": metadata["registry_name"],
+        "model_alias": metadata["model_alias"],
+        "model_version": metadata["version"],
+        "model_run_id": metadata["run_id"],
+        "model_uri": metadata["run_info"]["_artifact_uri"],
+        "model_commit_id": metadata["tags"]["mlflow.source.git.commit"],
+        "model_trained_at": metadata["tags"]["run_date"],
+        "params": params,
+    }
+    return past, forecast, meta
 
 
 def retrieve_registered_model() -> tuple:
@@ -62,7 +76,25 @@ def retrieve_registered_model() -> tuple:
     mv = CLIENT.get_model_version_by_alias(name=REGISTRY_NAME, alias=MODEL_ALIAS)
     run = CLIENT.get_run(mv.run_id)
     params = run.data.params
-    return model, params
+    metadata = extract_metadata(
+        mv.run_id, run.info.__dict__, run.data.tags, run.data.metrics
+    )
+    metadata["aliases"] = "-".join(mv.aliases)
+    metadata["version"] = mv.version
+    return model, params, metadata
+
+
+def extract_metadata(
+    run_id: str, run_info: dict, run_tags: dict, run_metrics: dict
+) -> dict:
+    metadata = {}
+    metadata["registry_name"] = REGISTRY_NAME
+    metadata["model_alias"] = MODEL_ALIAS
+    metadata["run_id"] = run_id
+    metadata["run_info"] = run_info
+    metadata["tags"] = run_tags
+    metadata["metrics"] = run_metrics
+    return metadata
 
 
 def retrieve_locally_stored_model() -> tuple:
@@ -74,7 +106,11 @@ def retrieve_locally_stored_model() -> tuple:
     logger.info(f"Loading params from: {fpath}")
     with open(fpath) as f:
         params = json.load(f)
-    return model, params
+    fpath = os.path.join(MODELPATH, "metadata.json")
+    logger.info(f"Loading metadata from: {fpath}")
+    with open(fpath) as f:
+        metadata = json.load(f)
+    return model, params, metadata
 
 
 def handle_series_data(data_dict: dict, ticker: str) -> pd.DataFrame:
@@ -110,8 +146,9 @@ def run_forecast(
     bizday_offset: bool = True,
     past_horizon: int = 1,
 ) -> tuple:
-    # Build features on your last observed history
-    CldrFeats = parameters["CldrFeats"] if "CldrFeats" in parameters.keys() else True
+    # Build features on recent history
+    CldrFeats = parameters["CldrFeats"] if "CldrFeats" in parameters.keys() else "True"
+    CldrFeats = True if CldrFeats == "True" else False
     df_feats, _ = build_features(
         df_init, lags=int(parameters["lags"]), CldrFeats=CldrFeats
     )
@@ -160,48 +197,8 @@ def run_forecast(
     return past_prices, forecast
 
 
-def load_json_maybe_compressed(raw: dict, enc: str | None = None) -> dict:
-    """
-    Supports plain JSON bodies, plus optionally:
-      - Content-Encoding: gzip
-      - Content-Encoding: br   (if 'brotli' is installed)
-    """
-
-    if enc == "gzip":
-        try:
-            decompressed = gzip.decompress(raw)
-        except OSError:
-            abort(400, description="Invalid gzip payload")
-    elif enc in ("", None):
-        # not compressed; leave as-is
-        decompressed = raw
-    else:
-        abort(415, description=f"Unsupported Content-Encoding: {enc}")
-
-    try:
-        input_dict = json.loads(decompressed or b"{}")
-        return input_dict
-    except json.JSONDecodeError:
-        abort(400, description="Invalid JSON")
-
-
-app = Flask("stocks-forecasting")
-
-
-@app.route("/v1/forecast/from_symbol", methods=["POST"])
-def forecast_endpoint_from_symbol() -> dict:
-    """
-    Expects JSON with the following structure:
-    {
-      "ticker": "AAPL",
-      "past_horizon": 1
-    }
-    """
-    request_json = request.get_json()
-    ticker = request_json["ticker"]
-    past_horizon = request_json["past_horizon"]
-    print(f"forecasting for: {ticker}")
-    past, forecast = stocks_forecasting_inference_flow(
+def forecast_from_symbol(ticker: str, past_horizon: int) -> dict:
+    past, forecast, meta = stocks_forecasting_inference_flow(
         ticker, use_model_registry=False, past_horizon=past_horizon
     )
     # make Date a column instead of the index
@@ -213,31 +210,10 @@ def forecast_endpoint_from_symbol() -> dict:
         "past": ld.to_dict(orient="records"),
         "forecast": fc.to_dict(orient="records"),
     }
-    return jsonify(result)
+    return result, meta
 
 
-@app.route("/v1/forecast/from_data", methods=["POST"])
-def forecast_endpoint_from_series() -> dict:
-    """
-    Expects columnar JSON ONLY:
-    {
-      "ticker": "AAPL",
-      "series": {
-        "date":  ["2025-07-21", "2025-07-22", ...],
-        "close": [231.14,       233.02,      ...]
-      }
-      "past_horizon": 1
-    }
-    """
-    print("forecasting from data for symbol:", end="")
-    raw = request.get_data(cache=False)
-    enc = (request.headers.get("Content-Encoding") or "").lower()
-    p = load_json_maybe_compressed(raw, enc)
-    ticker = p.get("ticker", "NA")
-    print(ticker)
-    series = p.get("series") or {}
-    past_horizon = p.get("past_horizon", 1)
-
+def forecast_from_data(ticker: str, past_horizon: int, series: dict) -> dict:
     dates = series.get("date")
     closes = series.get("close")
 
@@ -263,7 +239,7 @@ def forecast_endpoint_from_series() -> dict:
 
     print("data validated, forecasting..")
     # Run your inference flow that accepts a pre-supplied price series
-    past, forecast = stocks_forecasting_inference_flow(
+    past, forecast, meta = stocks_forecasting_inference_flow(
         ticker=ticker,
         data_dict=data_dict,
         use_model_registry=False,
@@ -279,11 +255,267 @@ def forecast_endpoint_from_series() -> dict:
         "past": ld.to_dict(orient="records"),
         "forecast": fc.to_dict(orient="records"),
     }
-    return result
+    return result, meta
+
+
+def load_json_maybe_compressed(raw: dict, enc: str | None = None) -> dict:
+    """
+    Supports plain JSON bodies, plus optionally:
+      - Content-Encoding: gzip
+      - Content-Encoding: br   (if 'brotli' is installed)
+    """
+
+    if enc == "gzip":
+        try:
+            decompressed = gzip.decompress(raw)
+        except OSError:
+            abort(400, description="Invalid gzip payload")
+    elif enc in ("", None):
+        # not compressed; leave as-is
+        decompressed = raw
+    else:
+        abort(415, description=f"Unsupported Content-Encoding: {enc}")
+
+    try:
+        input_dict = json.loads(decompressed or b"{}")
+        return input_dict
+    except json.JSONDecodeError:
+        abort(400, description="Invalid JSON")
+
+
+def base_meta() -> dict:
+    return {
+        "generated_at": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
+        "service_version": SERVICE_VERSION,
+        "request_id": g.request_id,  # request_id before_request packs request_id in the header, this is just for convenience
+    }
+
+
+def make_api_response(
+    data: dict,
+    *,  # all args afterwards must be named to avoid mix-ups
+    status: int = 200,
+    meta: dict | None = None,
+    headers: dict | None = None,
+    envelope: bool = True,
+) -> Response:
+    # add base_meta() to meta (right hand side wins on conflict)
+    meta_full = base_meta() | (meta or {})
+
+    if envelope:
+        body = {"meta": meta_full, "data": data}
+    else:
+        # legacy shape (v1): keep data at top level
+        body = dict(data)  # shallow copy
+        body["meta"] = meta_full
+
+    resp = make_response(jsonify(body), status)
+    if headers:
+        for k, v in headers.items():
+            resp.headers[k] = v
+    return resp
+
+
+app = Flask("stocks-forecasting")
+
+
+@app.before_request
+def ensure_request_id() -> None:
+    rid = request.headers.get("X-Request-ID")
+    if not rid:
+        rid = str(uuid.uuid4())
+    g.request_id = rid
+
+
+@app.after_request
+def echo_request_id(resp: Response) -> Response:
+    # echo on every response
+    resp.headers["X-Request-ID"] = g.request_id
+    return resp
+
+
+@app.errorhandler(HTTPException)
+def handle_http_exception(e: HTTPException) -> Response:
+    problem = {
+        "type": "about:blank",
+        "title": e.name,  # e.g. "Bad Request"
+        "status": e.code,  # 400
+        "detail": e.description,  # e.g. "Missing signature_name"
+    }
+    resp = jsonify(problem)
+    resp.status_code = e.code
+    resp.headers["Content-Type"] = "application/problem+json"
+    return resp
+
+
+@app.errorhandler(Exception)
+def handle_unexpected(e: Exception) -> Response:
+    # last-resort 500 in JSON with stack trace logged
+    logger.exception("Unhandled server error")
+    resp = jsonify({
+        "type": "about:blank",
+        "title": "Internal Server Error",
+        "status": 500,
+        "detail": "An unexpected error occurred.",
+    })
+    resp.status_code = 500
+    resp.headers["Content-Type"] = "application/problem+json"
+    return resp
+
+
+@app.route("/v2/forecast", methods=["POST"])
+def forecast_endpoint() -> dict:
+    """
+    Expects columnar JSON ONLY:
+    {
+      "signature_name": "from_symbol",  # or "from_data"
+      "ticker": "AAPL",
+      "series": {  # needed only if "signature_name" = "from_data"
+        "date":  ["2025-07-21", "2025-07-22", ...],
+        "close": [231.14,       233.02,      ...]
+      }
+      "past_horizon": 1
+    }
+    """
+    print("forecasting from data for symbol:", end="")
+    raw = request.get_data(cache=False)
+    enc = (request.headers.get("Content-Encoding") or "").lower()
+    p = load_json_maybe_compressed(raw, enc)
+    signature_name = p.get("signature_name", "NA")
+    ticker = p.get("ticker", "NA")
+    past_horizon = p.get("past_horizon", 1)
+    print(f"{ticker} with past_horizon: {past_horizon}")
+    print(
+        f"forecasting for: {ticker} with past_horizon: {past_horizon} via {signature_name} service"
+    )
+
+    try:
+        if signature_name == "from_symbol":
+            result, meta = forecast_from_symbol(ticker, past_horizon)
+        elif signature_name == "from_data":
+            series = p.get("series") or None
+            if series is None:
+                print("no series was provided, defaulting to from_symbol service")
+                result, meta = forecast_from_symbol(ticker, past_horizon)
+            else:
+                result, meta = forecast_from_data(ticker, past_horizon, series)
+        else:
+            abort(400, description=f"Unsupported signature_name: {signature_name}")
+    except ValueError as e:
+        logger.warning(
+            f"Error forecasting for ticker {ticker}",
+            extra={"ticker": ticker, "err": str(e)},
+        )
+        raise BadRequest(description=f"Error forecasting for ticker: {ticker}") from e
+        # abort(400, description=f"Error forecasting for ticker: {ticker}")
+
+    meta["api_endpoint"] = "/v2/forecast"
+    meta["api_signature_name"] = signature_name
+    meta["ticker"] = ticker
+    headers = {
+        "Cache-Control": "no-store",
+        # "Link": '</openapi.json>; rel="describedby"',  # when the documentation is available
+    }
+    resp = make_api_response(
+        result,
+        meta=meta,
+        headers=headers,
+        envelope=True,
+    )
+    return resp
+
+
+@app.route("/v1/forecast/from_symbol", methods=["POST"])
+def forecast_endpoint_from_symbol() -> dict:
+    """
+    Expects JSON with the following structure:
+    {
+      "ticker": "AAPL",
+      "past_horizon": 1
+    }
+    """
+    print("forecasting from data for symbol:", end="")
+    raw = request.get_data(cache=False)
+    enc = (request.headers.get("Content-Encoding") or "").lower()
+    p = load_json_maybe_compressed(raw, enc)
+    ticker = p.get("ticker", "NA")
+    past_horizon = p.get("past_horizon", 1)
+    print(f"{ticker} with past_horizon: {past_horizon}")
+    result, meta = forecast_from_symbol(ticker, past_horizon)
+    meta["api_endpoint"] = "/v1/forecast/from_symbol"
+    meta["ticker"] = ticker
+    headers = {
+        "Cache-Control": "no-store",
+        "Deprecation": "true",
+        "Link": '</v2/forecast>; rel="successor-version"',
+    }
+    resp = make_api_response(result, meta=meta, headers=headers, envelope=False)
+    return resp
+
+
+@app.route("/v1/forecast/from_data", methods=["POST"])
+def forecast_endpoint_from_series() -> dict:
+    """
+    Expects columnar JSON ONLY:
+    {
+      "ticker": "AAPL",
+      "series": {
+        "date":  ["2025-07-21", "2025-07-22", ...],
+        "close": [231.14,       233.02,      ...]
+      }
+      "past_horizon": 1
+    }
+    """
+    print("forecasting from data for symbol:", end="")
+    raw = request.get_data(cache=False)
+    enc = (request.headers.get("Content-Encoding") or "").lower()
+    p = load_json_maybe_compressed(raw, enc)
+    ticker = p.get("ticker", "NA")
+    past_horizon = p.get("past_horizon", 1)
+    print(f"{ticker} with past_horizon: {past_horizon}")
+    series = p.get("series") or None
+    if series is None:
+        print("no series was provided, defaulting to from_symbol service")
+        result, meta = forecast_from_symbol(ticker, past_horizon)
+    else:
+        result, meta = forecast_from_data(ticker, past_horizon, series)
+    meta["api_endpoint"] = "/v1/forecast/from_data"
+    meta["ticker"] = ticker
+    headers = {
+        "Cache-Control": "no-store",
+        "X-Request-ID": getattr(g, "request_id", None),
+        "Deprecation": "true",
+        "Link": '</v2/forecast>; rel="successor-version"',
+    }
+    resp = make_api_response(result, meta=meta, headers=headers, envelope=False)
+    return resp
+
+
+@app.get("/healthz")
+def healthz() -> tuple:
+    return jsonify({
+        "status": "ok",
+        "service": "stocks-forecasting",
+        "version": "v1",
+        "time": datetime.now(UTC).isoformat(),
+    }), 200
+
+
+@app.get("/")
+def index() -> tuple:
+    return jsonify({
+        "message": "stocks-forecasting API",
+        "health": "/healthz",
+        "endpoints": [
+            {"path": "/v2/forecast", "method": "POST"},
+            {"path": "/v1/forecast/from_symbol", "method": "POST"},
+            {"path": "/v1/forecast/from_data", "method": "POST"},
+        ],
+    }), 200
 
 
 # if __name__ == "__main__":
-#     stocks_forecasting_inference_flow(
-#         ticker="AAPL", use_model_registry=False, past_horizon=5
-#     )
-# app.run(debug=True, host="0.0.0.0", port=9696)
+#     app.run(debug=True, host="0.0.0.0", port=9696)
+# forecast_from_symbol(
+#     ticker="AAPL", past_horizon=5
+# )
