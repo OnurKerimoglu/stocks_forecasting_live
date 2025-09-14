@@ -184,19 +184,21 @@ The inference pipeline, i.e., the 'stocks_forecasting_inference_flow' function i
 - runs the champion model (see the next section)
 - returns the forecasts and the requested amount of recent data
 
-The inference service exposes a REST API (implemented with [Flask](https://palletsprojects.com/projects/flask/)) with two  POST endpoints: `/v1/forecast/from_data` and `/v1/forecast/from_symbol` - for forecasting from user-supplied price data or by ticker symbol, respectively. Here is an overview:
+The inference service exposes a REST API (implemented with [Flask](https://palletsprojects.com/projects/flask/)) with one POST endpoint: `/v2/forecast`. Value of the `signature_name` argument in the payload determines using service function forecasting from user-supplied price data (`signature_name=from_data`) or from the ticker symbol (`signature_name=from_symbol`), in which case the app will attempt to fetch the recent data of the symbol with `yfinance`. Here is an overview:
 
-| Method | Path                        | Description                                                 | Example json payload |
-|:------:|-----------------------------|-------------------------------------------------------------|------------------------|
-| POST   | `/v1/forecast/from_symbol`  | Forecasts by ticker symbol; the service fetches recent data  | ```{"ticker": "AAPL", "past_horizon": 10}``` |
-| POST   | `/v1/forecast/from_data`    | Forecasts using user-provided recent (closing) price data | ```{"ticker": "AAPL", "series": {"date":  ["2025-07-21", "2025-07-22", ...], "close": [231.14,       233.02,      ...]}, "past_horizon": 1}``` |
+| Method | Path          | Service           | Description                                                 | Example json payload |
+|:------:| ------------- | ----------------- |-------------------------------------------------------------|------------------------|
+| POST   | `/v2/forecast`| forecasting for symbol | Forecasts by ticker symbol; the service fetches recent data  | ```{"signature_name":"from_symbol" "ticker": "AAPL", "past_horizon": 10}``` |
+| POST   | `/v2/forecast` | forecast based on provided data | Forecasts using user-provided recent (closing) price data | ```{"signature_name":"from_data", "ticker": "AAPL", "series": {"date":  ["2025-07-21", "2025-07-22", ...], "close": [231.14,       233.02,      ...]}, "past_horizon": 1}``` |
+
+Note: two new API version replaced the still supported legacy endpoints, `/v1/forecast/from_symbol` and `v1/forecast/from_data` that did not require `signature_name` argument.
 
 Besides the POST endpoints, two additional convenience GET endpoints, i.e., `/` (root) and `/healthz` are exposed that provide a summary and health status of the service, respectively.
 See the following sections for the instructions on building, deploying and testing the service.
 
 #### Local Build and Deployment
 Building the inference pipeline is a two-step process:
-1. Model extraction from mlflow: issue `make extract_registered_model`, only after making sure that the mlflow server is running (if not `make mlflow_serve`). This will query mlflow and get the run_id of the model lineage registered with alias 'champion' (i.e., last version) in the 'stocks_forecasting_candidates' stack, and copy the `model.pkl` and `requirements.txt` artifacts as well as the parameters as `params.json` into an `data/extracted_model` folder under project root (after removing its previous contents), and sync the contents of this folder with the GCS `models_bucket` bucket defined in [config/gcs.yml](config/gcs.yml), depending on the current branch that sets the environment (`prod`->`prod`, `dev`->`dev`, otherwise `test`).
+1. Model extraction from mlflow: issue `make extract_registered_model`, only after making sure that the mlflow server is running (if not `make mlflow_serve`). This will query mlflow and get the run_id of the model lineage registered with alias 'champion' (i.e., last version) in the 'stocks_forecasting_candidates' stack, and copy the `model.pkl` and `requirements.txt` artifacts as well as the parameters and model metadata as `params.json` (that contain instructions for data preprocessing, which is necessary for reproducing the features obtained during model training) and `metadata.json` (that contains information such as the registry name, model version and training date) into an `data/extracted_model` folder under project root (after removing its previous contents), and sync the contents of this folder with the GCS `models_bucket` bucket defined in [config/gcs.yml](config/gcs.yml), depending on the current branch that sets the environment (`prod`->`prod`, `dev`->`dev`, otherwise `test`).
 2. Building the container image:  issue `make inference_build_local`. After triggering the `quality_checks` and `tests` targets (see [initial setup](#prerequisites-and-initial-setup)) to catch any obvious flaws, and checking whether the branch is clean state, the [deploy_inference/Dockerfile](deploy_inference/Dockerfile) will pack all necessary files and install packages needed for serving the inference pipeline. The current branch name (in sanitized form) and the (short) SHA of the latest commit will be appended to the tag of the Image-URI to allow tracibility.
 
 For testing local code  (e.g., a feature branch that has not been published yet), this container can be deployed locally with `make inference_serve_local`. This will start the flask app at `http://0.0.0.0:9696`
