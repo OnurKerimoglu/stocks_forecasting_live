@@ -19,8 +19,8 @@ COPY src/* ./src/
 RUN pip install -e .
 
 # Copy model artifacts and late-changing assets
-COPY data/extracted_model/model.pkl ./data/extracted_model/model.pkl
-COPY data/extracted_model/params.json ./data/extracted_model/params.json
+COPY data/extracted_model/* ./data/extracted_model/
+# COPY data/extracted_model/params.json ./data/extracted_model/params.json
 COPY main_inference.py ./main_inference.py
 
 EXPOSE 9696
