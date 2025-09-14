@@ -23,7 +23,7 @@ def fetch_ticker_data_from_yf(
             progress=False,
         )
     except Exception as e:
-        raise e from ValueError(f"Failed to fetch data for {ticker}")
+        raise ValueError(f"Failed to fetch data for {ticker}") from e
 
     # Get rid of the redundant Ticker index
     df.columns = df.columns.droplevel("Ticker")
@@ -36,5 +36,6 @@ def fetch_ticker_data_from_yf(
     if df.shape[0] > 0:
         logger.info(f"Fetched {df.shape[0]} rows for {ticker}")
     else:
+        logger.error(f"No valid rows in fetched data for {ticker}")
         raise ValueError(f"No valid rows in fetched data for {ticker}")
     return df
