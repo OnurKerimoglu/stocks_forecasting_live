@@ -21,8 +21,8 @@ LOCALPATH = os.path.join(rootpath, "data", "extracted_model")
 
 
 def main_extract_model(env: str, cloudupload: bool = True) -> None:
-    run_id, params = retrieve_registered_model()
-    store_model_artifacts_local(run_id, params)
+    run_id, params, metadata = retrieve_registered_model()
+    store_model_artifacts_local(run_id, params, metadata)
     print("model parameters are extracted into: ", LOCALPATH)
     if cloudupload:
         configs = Configs(env)
@@ -38,10 +38,26 @@ def retrieve_registered_model() -> tuple:
     run = CLIENT.get_run(run_id)
     params = run.data.params
     # artifacts = CLIENT.list_artifacts(run_id, path=MODEL_ARTIFACT_FOLDER)
-    return run_id, params
+    metadata = extract_metadata(
+        run_id, run.info.__dict__, run.data.tags, run.data.metrics
+    )
+    return run_id, params, metadata
 
 
-def store_model_artifacts_local(run_id: str, params: dict) -> None:
+def extract_metadata(
+    run_id: str, run_info: dict, run_tags: dict, run_metrics: dict
+) -> dict:
+    meta = {}
+    meta["registry_name"] = REGISTRY_NAME
+    meta["model_alias"] = MODEL_ALIAS
+    meta["run_id"] = run_id
+    meta["run_info"] = run_info
+    meta["tags"] = run_tags
+    meta["metrics"] = run_metrics
+    return meta
+
+
+def store_model_artifacts_local(run_id: str, params: dict, metadata: dict) -> None:
     # clean the local folder
     if os.path.exists(LOCALPATH):
         for f in os.listdir(LOCALPATH):
@@ -56,7 +72,13 @@ def store_model_artifacts_local(run_id: str, params: dict) -> None:
     params_fpath = os.path.join(LOCALPATH, "params.json")
     with open(params_fpath, "w") as f:
         json.dump(params, f)
-    print("params are stored in: ", params_fpath)
+    print("params stored in: ", params_fpath)
+
+    # store metadata as json
+    meta_fpath = os.path.join(LOCALPATH, "metadata.json")
+    with open(meta_fpath, "w") as f:
+        json.dump(metadata, f)
+    print("metadata stored in: ", meta_fpath)
 
     # store requirements.txt and model.pkl
     artifact_uri = f"runs:/{run_id}/{MODEL_ARTIFACT_FOLDER}"
