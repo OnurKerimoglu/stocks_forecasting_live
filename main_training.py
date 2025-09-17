@@ -32,6 +32,7 @@ DATAPATH = os.path.join(ROOTPATH, "data")
 RAWDATAPATH = os.path.join(DATAPATH, "raw")
 SAMPLEPATHROOT = "raw_samples"
 MODELPATH = os.path.join(ROOTPATH, "models")
+MLFLOWPATH = os.path.join(MODELPATH, "mlflow_runs")
 CONFPATH = os.path.join(ROOTPATH, "config")
 ISODATE = datetime.date.today().isoformat()
 
@@ -76,7 +77,9 @@ def stocks_forecasting_training_flow(
         - Evaluate the model
         - Log the model, parameters, metrics to mlfow
     3. Register the best model (task)
-    4. Cleanup (task)
+    4. Export the best model to local MLFLOWPATH (task)
+    5. Uload the best model to GCP (task)
+    6. Cleanup (task)
 
     Args:
     test_mode: bool
@@ -298,9 +301,9 @@ def export_model(run_id: str) -> None:
     """Export run to local filesystem"""
     logger = get_run_logger()
     logger.info(f"Exporting model with run_id: {run_id}")
-    localdir = os.path.join(MODELPATH, run_id)
+    localdir = os.path.join(MLFLOWPATH, run_id)
     if os.path.exists(localdir):
-        logger.info(f"Model was exported before to: {localdir}")
+        logger.info(f"Model had been ealier exported to: {localdir}")
         return
     # if the directory does not exist, download the artifacts
     logger.info(f"Exporting model to: {localdir}")
@@ -334,7 +337,7 @@ def upload_model_to_gcs(env: str, run_id: str) -> None:
     """
     logger = get_run_logger()
     logger.info(f"Exporting best model with run_id: {run_id}")
-    localdir = os.path.join(MODELPATH, run_id)
+    localdir = os.path.join(MLFLOWPATH, run_id)
     if not os.path.isdir(localdir):
         raise FileNotFoundError(f"Local directory '{localdir}' does not exist.")
     configs = Configs(env)
