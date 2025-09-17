@@ -232,22 +232,22 @@ def remove_raw_data(rawdatapath: str, datasource: str) -> None:
 
 
 def sample_tickers_dates(
-    df_clean: pd.DataFrame,
+    df: pd.DataFrame,
     tickers: list | None = None,
     startdate: datetime | None = None,
     datasource: str | None = None,
-    clean_sample_fdir: str | None = None,
+    sample_fdir: str | None = None,
     access_date_str: str | None = None,
 ) -> tuple[pd.DataFrame, str]:
     """
-    Samples a subset of tickers and/or dates from a cleaned DataFrame.
+    Samples a subset of tickers and/or dates from a DataFrame.
 
-    This function takes a cleaned DataFrame of stock price data and samples a subset
+    This function takes a DataFrame of stock price data and samples a subset
     of tickers and/or dates, returning a new DataFrame with the sampled data.
 
     Args:
-    df_clean : pd.DataFrame
-        The cleaned DataFrame of stock price data, which should have columns
+    df : pd.DataFrame
+        The DataFrame of stock price data, which should minimally have columns
         'Date', 'Close', and 'Ticker'.
     tickers : list or None, optional
         A list of tickers to sample from the data. If None, all tickers are kept.
@@ -257,7 +257,7 @@ def sample_tickers_dates(
         Defaults to None.
     datasource: src, optional
         The source of the data. E.g., 'Kaggle', 'yahoofinance
-    clean_sample_fdir : str or None, optional
+    sample_fdir : str or None, optional
         Path to the local directory in which the sampled DataFrame will be stored as CSV.
         If None (default), the DataFrame is not written to file.
     access_date_str : str or None, optional
@@ -271,35 +271,32 @@ def sample_tickers_dates(
         The file name of the sampled DataFrame in the local directory.
     """
     if tickers is None:
-        df_clean_sample = df_clean.copy()
+        df_sample = df.copy()
         ticker_suffix = "WSPall"
     else:
         logger.info(f"Sampling tickers: {tickers}")
-        df_clean_sample = df_clean[(df_clean["Ticker"].isin(tickers))].copy()
+        df_sample = df[(df["Ticker"].isin(tickers))].copy()
         ticker_suffix = "Tickers_" + "-".join(tickers)
     if startdate is not None:
         logger.info(f"Sampling from start date: {startdate}")
-        df_clean_sample = df_clean_sample[df_clean_sample["Date"] >= startdate].copy()
+        df_sample = df_sample[df_sample["Date"] >= startdate].copy()
         sample_date_suffix = f"_from_{startdate.strftime('%Y-%m-%d')}"
     else:
         sample_date_suffix = ""
 
-    # df_clean_sample.Date = pd.to_datetime(df_clean_sample['Date'])
-    # logger.info(f'sample shape: {df_clean_sample.shape}')
-    # df_clean_sample.sort_values('Date', ascending=True).head()
     # construct an id for archiving data
-    if clean_sample_fdir is not None:
+    if sample_fdir is not None:
         access_date_suffix = f"Access_{access_date_str}"
         fname_root = (
             f"{datasource}_{access_date_suffix}_{ticker_suffix}{sample_date_suffix}"
         )
-        fpath = store_df_locally(df_clean_sample, fname_root, clean_sample_fdir)
-        logger.info(f"Wrote cleaned sample to: {fpath}")
+        fpath = store_df_locally(df_sample, fname_root, sample_fdir)
+        logger.info(f"Wrote sample to: {fpath}")
     else:
         fpath = None
-    df_clean_sample.sort_values(["Ticker", "Date"], inplace=True)
+    df_sample.sort_values(["Ticker", "Date"], inplace=True)
 
-    return df_clean_sample, fpath
+    return df_sample, fpath
 
 
 def store_df_locally(
