@@ -9,7 +9,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-def create_fit_xgbregressor_chain(
+def create_xgbregressor_chain(
     X_train: pd.DataFrame, y_train: pd.DataFrame, Regularization: bool = True
 ) -> RegressorChain:
     """
@@ -35,7 +35,7 @@ def create_fit_xgbregressor_chain(
         logger.info("Instantiating a regularized XGBoost regressor")
         xgb = XGBRegressor(
             objective="reg:squarederror",
-            n_estimators=500,  # large upper bound
+            n_estimators=100,  # smaller upper bound
             learning_rate=0.05,
             max_depth=6,
             subsample=0.8,
@@ -48,7 +48,7 @@ def create_fit_xgbregressor_chain(
         logger.info("Instantiating a non-regularized XGBoost regressor")
         xgb = XGBRegressor(
             objective="reg:squarederror",
-            n_estimators=500,  # Keep a large upper bound, but expect it to overfit quicker
+            n_estimators=500,  # larger upper bound, expect it to overfit quicker
             learning_rate=0.05,  # Slightly increased or kept the same to allow more aggressive learning
             max_depth=10,  # Significantly deeper trees
             subsample=1.0,  # Use all training samples for each tree
@@ -58,9 +58,6 @@ def create_fit_xgbregressor_chain(
             random_state=42,
         )
     estimator = RegressorChain(estimator=xgb)
-    logger.info("Training the model..")
-    estimator.fit(X_train, y_train)
-    logger.info("Training finalized.")
     return estimator
 
 
