@@ -8,6 +8,7 @@ from mlflow.tracking import MlflowClient
 
 from gcp_functions import clear_gcs_folder, upload_directory
 from load_configs import Configs
+from mlflow_helpers import MLFlowRetriever
 
 # Global parameters
 mlflow.set_tracking_uri("http://127.0.0.1:5000")
@@ -21,7 +22,11 @@ LOCALPATH = os.path.join(rootpath, "data", "extracted_model")
 
 
 def main_extract_model(env: str, cloudupload: bool = True) -> None:
-    run_id, params, metadata = retrieve_registered_model()
+    # collect and store additional metadata
+    run_id, metadata = MLFlowRetriever(client=CLIENT).retrieve_mlflow_model_metadata(
+        registry_name=REGISTRY_NAME, model_alias=MODEL_ALIAS
+    )
+    params = metadata["params"]
     store_model_artifacts_local(run_id, params, metadata)
     print("model parameters are extracted into: ", LOCALPATH)
     if cloudupload:
@@ -29,34 +34,6 @@ def main_extract_model(env: str, cloudupload: bool = True) -> None:
         upload_to_gcs(configs.cloud, localpath=LOCALPATH)
     else:
         print("model artifacts are not uploaded to GCS")
-
-
-def retrieve_registered_model() -> tuple:
-    # Find the run_id, and extract the parameters
-    mv = CLIENT.get_model_version_by_alias(name=REGISTRY_NAME, alias=MODEL_ALIAS)
-    run_id = mv.run_id
-    run = CLIENT.get_run(run_id)
-    params = run.data.params
-    # artifacts = CLIENT.list_artifacts(run_id, path=MODEL_ARTIFACT_FOLDER)
-    metadata = extract_metadata(
-        run_id, run.info.__dict__, run.data.tags, run.data.metrics
-    )
-    metadata["aliases"] = "-".join(mv.aliases)
-    metadata["version"] = mv.version
-    return run_id, params, metadata
-
-
-def extract_metadata(
-    run_id: str, run_info: dict, run_tags: dict, run_metrics: dict
-) -> dict:
-    meta = {}
-    meta["registry_name"] = REGISTRY_NAME
-    meta["model_alias"] = MODEL_ALIAS
-    meta["run_id"] = run_id
-    meta["run_info"] = run_info
-    meta["tags"] = run_tags
-    meta["metrics"] = run_metrics
-    return meta
 
 
 def store_model_artifacts_local(run_id: str, params: dict, metadata: dict) -> None:
