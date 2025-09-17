@@ -39,6 +39,22 @@ resource "google_storage_bucket" "data-monitoring-bucket" {
   }
 }
 
+resource "google_storage_bucket" "mlflow-bucket" {
+  name          = var.gcs_mlflow_bucket_name
+  location      = var.location
+  force_destroy = true
+
+
+  lifecycle_rule {
+    condition {
+      age = 1
+    }
+    action {
+      type = "AbortIncompleteMultipartUpload"
+    }
+  }
+}
+
 resource "google_storage_bucket" "models-test-bucket" {
   name          = var.gcs_models_test_bucket_name
   location      = var.location
