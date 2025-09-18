@@ -2,6 +2,7 @@ import io
 import json
 import os
 import pickle
+import shutil
 import subprocess
 
 import pandas as pd
@@ -139,12 +140,7 @@ def download_directory(
     if os.path.exists(local_dir):
         if refresh:
             print(f"Clearing {local_dir}")
-            for f in os.listdir(local_dir):
-                try:
-                    os.remove(os.path.join(local_dir, f))
-                except Exception as e:
-                    print(e)
-                    os.rmdir(f)
+            shutil.rmtree(local_dir)
         else:
             print("Specified directory exists and refresh is set to False. Exiting.")
             return
