@@ -45,8 +45,8 @@ STATIC_PARS = {
 # Set up mlflow
 mlflow.set_tracking_uri("http://127.0.0.1:5000")
 MODEL_ARTIFACT_FOLDER = "mlflow_models"
-REGISTRY_NAME = "stocks_forecasting_candidates"
-MODEL_ALIAS = "champion"
+REGISTRY_NAME = "stocks_forecasting"
+MODEL_ALIAS = "Candidate"
 CLIENT = MlflowClient()
 EXPS, EXP_NAME = build_exp_dicts(
     os.path.join(CONFPATH, "Exp_CldrFeats_ModReg.yaml")  # _test
