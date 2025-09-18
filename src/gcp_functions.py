@@ -89,10 +89,10 @@ def upload_directory(
         for file in files:
             local_path = os.path.join(root, file)
             rel_path = os.path.relpath(local_path, local_dir)
-            if folder is not None:
-                blob_path = os.path.join(folder, rel_path).replace("\\", "/")
-            else:
+            if (folder == "") or (folder is None):
                 blob_path = rel_path
+            else:
+                blob_path = os.path.join(folder, rel_path).replace("\\", "/")
 
             blob = bucket.blob(blob_path)
             blob.upload_from_filename(local_path)
@@ -108,8 +108,12 @@ def upload_file_to_folder(
     bucket = client.bucket(bucket_name)
     fname = os.path.basename(file)
     # construct blob name with fname and prefix = folder
-    blob_name = f"{folder}/{fname}"
-    blob = bucket.blob(blob_name)
+    if (folder == "") or (folder is None):
+        blob_path = fname
+    else:
+        blob_path = os.path.join(folder, fname).replace("\\", "/")
+
+    blob = bucket.blob(blob_path)
     blob.upload_from_filename(file)
     print(f"Uploaded {file} to gs://{bucket.name}/{folder}")
 
