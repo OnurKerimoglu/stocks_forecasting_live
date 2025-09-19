@@ -43,8 +43,14 @@ prefect_deploy_train:
 	python scripts/deploy_training_workflow.py --env ${BRANCH_SIMPLE}
 	prefect worker start --pool "stocks_forecasting_live_local"
 
-extract_registered_model:
-	python scripts/extract_mlflow_artifacts.py --env ${BRANCH_SIMPLE} --cloudupload
+model_promote_staging:
+	python main_promotion.py --promote_candidate --require_better
+
+model_promote_production:
+	python main_promotion.py --promote_challenger --require_better
+
+model_extract:
+	python scripts/download_extracted_model_from_cloud.py --env ${BRANCH_SIMPLE} --refresh
 
 inference_build_local: quality_checks tests
 	@if [ "$(GIT_TREE_STATE)" = "dirty" ]; then \
@@ -87,7 +93,7 @@ inference_test_raw:
 	  -d '{"ticker":"GOOG", "past_horizon": 5}'
 
 inference_test_pretty:
-	python scripts/test_inference.py --env ${BRANCH_SIMPLE} --ticker GOOG --past_horizon 5 --endpoint v2/forecast --signature_name from_symbol
+	python scripts/test_inference.py --env ${BRANCH_SIMPLE} --ticker GOOG --past_horizon 5 --endpoint v2/forecast --signature_name from_symbol --model_id default
 
 FNAME_NEW="yahoofinance_Access_2025-09-08_WSPall_from_2020-09-08.parquet"
 ENV_NEW="prod"
