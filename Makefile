@@ -1,3 +1,7 @@
+# .env should provide: GCS_VIEWER_KEY_PATH
+-include .env
+export
+
 # GCP settings
 # should match with terraform/variables.tf and main.tf
 PROJECT_ID   ?= stocks-forecasting-466906
@@ -7,6 +11,7 @@ IMAGE_NAME   ?= stocks_forecasting_inference
 VERSION      ?= latest
 SERVICE_NAME_ROOT ?= stocks-forecasting-service
 SERVICE_ACCOUNT ?= stocks-forecasting-mle@$(PROJECT_ID).iam.gserviceaccount.com
+GCS_VIEWER_KEY_PATH ?= $(HOME)/gcp-keys/my-gcs-viewer-key.json
 
 GIT_TREE_STATE:=$(shell test -z "$$(git status --porcelain)" && echo clean || echo dirty)
 BRANCH_ST:=$(shell echo $$(git rev-parse --abbrev-ref HEAD) | sed 's/\//_/g')
@@ -60,8 +65,12 @@ inference_build_local: quality_checks tests
 	  docker build -f deploy_inference/Dockerfile -t ${IMAGE_URI} .; \
 	fi
 
+# copy the gcp key to provide access to the alternative models stored in GCS
 inference_serve_local:
-	docker run -it --rm -p 9696:9696 ${IMAGE_URI}
+	docker run -it --rm -p 9696:9696 \
+	-v "$(GCS_VIEWER_KEY_PATH)":/var/secrets/gcp/key.json:ro \
+	-e GOOGLE_APPLICATION_CREDENTIALS=/var/secrets/gcp/key.json \
+	${IMAGE_URI}
 
 inference_publish: inference_build_local
 	@echo "Configuring Docker to auth with GAR"
