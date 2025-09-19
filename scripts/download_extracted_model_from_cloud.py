@@ -7,7 +7,7 @@ from load_configs import Configs
 from utils import resolve_model_bundle_uri_for_env
 
 # Global parameters
-ROOTPATH = os.path.dirname(__file__)
+ROOTPATH = os.path.dirname(os.path.dirname(__file__))
 MODELPATH = os.path.join(ROOTPATH, "models")
 EXTRACTED_MODEL_DIRNAME = "extracted_model"
 
@@ -42,6 +42,6 @@ if __name__ == "__main__":
     parser.add_argument("--refresh", action="store_true")
     parser.add_argument("--no-refresh", dest="refresh", action="store_false")
     parser.set_defaults(feature=True)
-    args = parser.parse_args()
-    download_extracted_model_from_gcs(env=args.env, refresh=args.refresh)
-    # download_extracted_model_from_gcs(env="prod", refresh=True)
+    # args = parser.parse_args()
+    # download_extracted_model_from_gcs(env=args.env, refresh=args.refresh)
+    download_extracted_model_from_gcs(env="dev", refresh=True)
