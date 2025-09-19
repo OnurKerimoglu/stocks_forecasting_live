@@ -23,6 +23,14 @@ def read_file_as_df(project_id: str, bucket_name: str, gcs_path: str) -> None:
     return df
 
 
+def blob_exists(project_id: str, bucket_name: str, gcs_path: str) -> bool:
+    # Initialize client
+    client = storage.Client(project=project_id)
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(gcs_path)
+    return blob.exists
+
+
 def load_pickle_from_gcs(project_id: str, bucket_name: str, gcs_path: str) -> None:
     # Initialize client
     client = storage.Client(project=project_id)
