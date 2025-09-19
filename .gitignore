@@ -210,8 +210,10 @@ __marimo__/
 .streamlit/secrets.toml
 
 data/
+models/
 
 mlflow.db
+mlruns
 artifacts/
 
 sandbox/

@@ -7,41 +7,6 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-def clean_raw_data(df_raw: pd.DataFrame, winsorize: bool = True) -> pd.DataFrame:
-    """
-    Cleans and processes raw stock price data.
-
-    This function takes a DataFrame containing raw stock price data and performs
-    a series of cleaning and processing steps, including converting date values,
-    removing duplicates, calculating returns, and winsorizing the returns.
-
-    Args:
-    df_raw : pd.DataFrame
-        The raw stock price data, which should have columns 'Date', 'Close', and 'Ticker'.
-
-    Returns:
-    pd.DataFrame
-        A cleaned DataFrame with columns 'Date', 'Close', 'Ticker', and 'returns',
-        where 'returns' represents the percentage change in 'Close' prices, winsorized
-        to remove extreme outliers.
-    """
-    df_clean = df_raw.copy()
-    df_clean.drop_duplicates(subset=["Date", "Ticker"], keep="first", inplace=True)
-    df_clean = df_clean[["Date", "Close", "Ticker"]]
-    df_clean["returns"] = df_clean.groupby("Ticker")["Close"].pct_change()
-    if winsorize:
-        lower, upper = (
-            df_clean["returns"].quantile(0.01),
-            df_clean["returns"].quantile(0.99),
-        )
-        logger.info(
-            f"The returns are winsorized with upper and lower caps of respectively {upper} and {lower}"
-        )
-        df_clean["returns"] = df_clean["returns"].clip(lower, upper)
-    df_clean.dropna(inplace=True)
-    return df_clean
-
-
 def split_train_test_panel(
     df: pd.DataFrame, train_ratio: float, date_col: str = "Date"
 ) -> tuple[pd.DataFrame, pd.DataFrame]:

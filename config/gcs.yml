@@ -3,6 +3,7 @@ shared:
   region: europe-west1
   service_name_root: stocks-forecasting-service
   data_monitoring_bucket: stocks-forecasting-data-monitoring
+  mlflow_bucket: stocks-forecasting-mlflow
 test:
   models_bucket: stocks-forecasting-models-test
 dev:

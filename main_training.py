@@ -1,23 +1,22 @@
 import datetime
+import json
 import os
 
 import mlflow
 import pandas as pd
+from mlflow.artifacts import download_artifacts
 from mlflow.entities import ViewType
 from mlflow.models.signature import infer_signature
 from mlflow.tracking import MlflowClient
 from prefect import flow, get_run_logger, task
 
 from create_experiments import build_exp_dicts
-from data import (
-    build_features,
-    clean_raw_data,
-    create_X_y_multistep,
-    split_train_test_panel,
-)
-from gcp_functions import upload_file_to_folder
+from data import split_train_test_panel
+from gcp_functions import clear_gcs_folder, upload_directory, upload_file_to_folder
 from load_configs import Configs
-from models import create_fit_xgbregressor_chain, evaluate_all
+from mlflow_helpers import MLFlowRetriever
+from models import evaluate_all
+from preprocessor_model_pipeline import PpModelPl
 from raw_data import (
     load_raw_data,
     remove_raw_data,
@@ -31,6 +30,9 @@ SAMPLE_TICKERS = ["AAPL", "AMZN"]
 ROOTPATH = os.path.dirname(__file__)
 DATAPATH = os.path.join(ROOTPATH, "data")
 RAWDATAPATH = os.path.join(DATAPATH, "raw")
+SAMPLEPATHROOT = "raw_samples"
+MODELPATH = os.path.join(ROOTPATH, "models")
+MLFLOWPATH = os.path.join(MODELPATH, "mlflow_runs")
 CONFPATH = os.path.join(ROOTPATH, "config")
 ISODATE = datetime.date.today().isoformat()
 
@@ -43,7 +45,8 @@ STATIC_PARS = {
 # Set up mlflow
 mlflow.set_tracking_uri("http://127.0.0.1:5000")
 MODEL_ARTIFACT_FOLDER = "mlflow_models"
-REGISTRY_NAME = "stocks_forecasting_candidates"
+REGISTRY_NAME = "stocks_forecasting"
+MODEL_ALIAS = "Candidate"
 CLIENT = MlflowClient()
 EXPS, EXP_NAME = build_exp_dicts(
     os.path.join(CONFPATH, "Exp_CldrFeats_ModReg.yaml")  # _test
@@ -74,7 +77,9 @@ def stocks_forecasting_training_flow(
         - Evaluate the model
         - Log the model, parameters, metrics to mlfow
     3. Register the best model (task)
-    4. Cleanup (task)
+    4. Export the best model to local MLFLOWPATH (task)
+    5. Uload the best model to GCP (task)
+    6. Cleanup (task)
 
     Args:
     test_mode: bool
@@ -99,12 +104,12 @@ def stocks_forecasting_training_flow(
                 f"As running in a primary env {env}, use_sample_tickers_for_training is set to False"
             )
             use_sample_tickers_for_training = False
-    clean_sample_fdir = os.path.join(DATAPATH, f"cleaned_samples_{env}")
+    sample_fdir = os.path.join(DATAPATH, f"{SAMPLEPATHROOT}_{env}")
     df, df_train, df_test = base_data_prep(
-        datasource, localrun, env, use_sample_tickers_for_training, clean_sample_fdir
+        datasource, localrun, env, use_sample_tickers_for_training, sample_fdir
     )
 
-    # step 2: run experiments (tasks as sub-flow)
+    # step 2: run experiments (task)
     for i, exp in enumerate(EXPS):
         logger.info(f"Running experiment {i + 1} of {len(EXPS)}")
         # create a run name based on experiment parameters:
@@ -114,9 +119,15 @@ def stocks_forecasting_training_flow(
         )
 
     # step 3: register_best_model (task)
-    register_best_model(only_latest=select_only_latest)
+    best_run_id = register_best_model(only_latest=select_only_latest)
 
-    # step 4: cleanup (task)
+    # step 4: export best model (task)
+    export_model(best_run_id)
+
+    # step 5: upload the best model directory cloud
+    upload_model_to_gcs(env, best_run_id)
+
+    # step 6: cleanup (task)
     if env in ["dev", "prod"]:
         remove_raw_data(RAWDATAPATH, datasource)
         logger.info(f"Running in a primary env {env}, therefore removing raw data")
@@ -136,7 +147,7 @@ def base_data_prep(
     localrun: str,
     env: str,
     use_sample_tickers_for_training: bool,
-    clean_sample_fdir: str | None = None,
+    sample_fdir: str | None = None,
 ) -> tuple:
     # load the raw data
     df_raw, access_date_str = load_raw_data(
@@ -147,15 +158,13 @@ def base_data_prep(
         user="nelgiriyewithana",
         datasetname="world-stock-prices-daily-updating",
     )
-    # clean the raw data (e.g. winsorize returns)
-    df_clean = clean_raw_data(df_raw)
     # sample tickers and dates
     df, fpath = sample_tickers_dates(
-        df_clean,
+        df_raw,
         tickers=SAMPLE_TICKERS if use_sample_tickers_for_training else None,
         startdate=datetime.datetime.now() - datetime.timedelta(days=365 * 5 + 1),
         datasource=datasource,
-        clean_sample_fdir=clean_sample_fdir,
+        sample_fdir=sample_fdir,
         access_date_str=access_date_str,
     )
     store_sampled_data_in_gcs(env, fpath)
@@ -180,27 +189,31 @@ def run_single_experiment(
     # if somehow a stray run is active, close it
     if mlflow.active_run() is not None:
         mlflow.end_run()
-    with mlflow.start_run(run_name=run_name):
-        # Training: prepare data
+    with mlflow.start_run(run_name=run_name) as run:
+        # Parse parameters
         CldrFeats = exp["CldrFeats"] if "CldrFeats" in exp.keys() else True
-        df_train_feats, _features2scale = build_features(
-            df_train, lags=STATIC_PARS["lags"], CldrFeats=CldrFeats
+        ModReg = exp["ModReg"] if "ModReg" in exp.keys() else True
+        pp_model_pl = PpModelPl(
+            target="returns",
+            steps=STATIC_PARS["steps"],
+            date_col="Date",
+            price_col="Close",
+            ticker_col="Ticker",
+            winsorize=True,
+            q_low=0.01,
+            q_high=0.99,
+            lags=STATIC_PARS["lags"],
+            CldrFeats=CldrFeats,
+            ModReg=ModReg,
         )
-        df_test_feats, _features2scale = build_features(
-            df_test, lags=STATIC_PARS["lags"], CldrFeats=CldrFeats
-        )
-        X_train, y_train = create_X_y_multistep(
-            df_train_feats, steps=STATIC_PARS["steps"], target=TARGET
-        )
-        X_test, y_test = create_X_y_multistep(
-            df_test_feats, steps=STATIC_PARS["steps"], target=TARGET
-        )
-        # Instantiate and train a model
-        Regularization = exp["ModReg"] if "ModReg" in exp.keys() else True
-        estimator = create_fit_xgbregressor_chain(X_train, y_train, Regularization)
+        logger.info("Training the model..")
+        pp_model_pl.fit(df_train)
+        logger.info("Training finalized.")
         # Evaluate the model
+        X_train, y_train = pp_model_pl.make_X_y(df_train)
+        X_test, y_test = pp_model_pl.make_X_y(df_test)
         scores = evaluate_all(
-            estimator, X_train, y_train, X_test, y_test, df, SAMPLE_TICKERS
+            pp_model_pl.estimator_, X_train, y_train, X_test, y_test, df, SAMPLE_TICKERS
         )
         logger.info(scores)
         # log the parameters
@@ -212,15 +225,23 @@ def run_single_experiment(
             for metric, value in score_dict.items():
                 mlflow.log_metrics({f"{cat}_{metric}": value})
         # log the model
-        signature = infer_signature(X_train, estimator.predict(X_train))
+        signature = infer_signature(df_train, pp_model_pl.predict(df_train))
         pip_reqs = get_pipreqs_from_pyproject(os.path.join(ROOTPATH, "pyproject.toml"))
-        mlflow.sklearn.log_model(
-            estimator,
+        # serialized the pipeline as a sklearn-flavor model and log it
+        info = mlflow.sklearn.log_model(
+            sk_model=pp_model_pl,
             name=MODEL_ARTIFACT_FOLDER,
             pip_requirements=pip_reqs,
-            input_example=X_train.head(5),
+            input_example=df_train.head(80),
             signature=signature,
+            code_paths=[
+                "./src/preprocessor_model_pipeline.py",  # file defining PpModelPl
+                "./src/data.py",  # module providing build_features, create_X_y_multistep
+                "./src/models.py",  # module providing create_xgbregressor_chain
+            ],
         )
+        logger.info(f"Logged run ID: {run.info.run_id}")
+        logger.info(f"Logged model URI: {info.model_uri}")
 
 
 @task(task_run_name="register_best_model")
@@ -230,7 +251,7 @@ def store_sampled_data_in_gcs(env: str, fpath: str) -> None:
     upload_file_to_folder(
         project_id=config.cloud["gcs"]["project"],
         bucket_name=config.cloud["gcs"]["data_monitoring_bucket"],
-        folder=f"cleaned_samples_{env}",
+        folder=f"{SAMPLEPATHROOT}_{env}",
         file=fpath,
     )
     logger.info(
@@ -267,11 +288,65 @@ def register_best_model(only_latest: bool = True) -> None:
     version = registered.version
     logger.info(f"Registered model has version={version}")
     logger.info("Aliasing model as champion")
-    CLIENT.set_registered_model_alias(REGISTRY_NAME, alias="champion", version=version)
+    CLIENT.set_registered_model_alias(REGISTRY_NAME, alias=MODEL_ALIAS, version=version)
     logger.info("Tagging model as approved")
     CLIENT.set_model_version_tag(
         REGISTRY_NAME, version=version, key="validation_status", value="approved"
     )
+    return best_run_id
+
+
+@task(task_run_name="export_best_model")
+def export_model(run_id: str) -> None:
+    """Export run to local filesystem"""
+    logger = get_run_logger()
+    logger.info(f"Exporting model with run_id: {run_id}")
+    localdir = os.path.join(MLFLOWPATH, run_id)
+    if os.path.exists(localdir):
+        logger.info(f"Model had been ealier exported to: {localdir}")
+        return
+    # if the directory does not exist, download the artifacts
+    logger.info(f"Exporting model to: {localdir}")
+    os.makedirs(localdir)
+    download_artifacts(
+        artifact_uri=f"runs:/{run_id}/{MODEL_ARTIFACT_FOLDER}", dst_path=localdir
+    )
+    # collect and store additional metadata
+    run_id_meta, metadata = MLFlowRetriever(
+        client=CLIENT
+    ).retrieve_mlflow_model_metadata(
+        registry_name=REGISTRY_NAME, model_alias=MODEL_ALIAS
+    )
+    if run_id != run_id_meta:
+        msg = f"run_id: {run_id} does not match the run_id of the retrieved metadata: {run_id_meta}"
+        logger.error(msg)
+        raise RuntimeError(msg)
+    with open(os.path.join(localdir, MODEL_ARTIFACT_FOLDER, "metadata.json"), "w") as f:
+        json.dump(metadata, f, indent=2)
+    logger.info(f"model artifacts are stored in: {localdir}")
+
+
+@task(task_run_name="upload_to_gcs")
+def upload_model_to_gcs(env: str, run_id: str) -> None:
+    """
+    Syncing a local directory to a GCS Bucket.
+
+    Parameters:
+        localpath (str): Path to the local directory.
+        configs (dict): Configuration dict with GCS project and bucket.
+    """
+    logger = get_run_logger()
+    logger.info(f"Exporting best model with run_id: {run_id}")
+    localdir = os.path.join(MLFLOWPATH, run_id)
+    if not os.path.isdir(localdir):
+        raise FileNotFoundError(f"Local directory '{localdir}' does not exist.")
+    configs = Configs(env)
+    project_id = configs.cloud["gcs"]["project"]
+    bucket_name = configs.cloud["gcs"]["mlflow_bucket"]
+    gcs_folder = "runs/" + os.path.basename(localdir.rstrip("/"))
+
+    clear_gcs_folder(project_id, bucket_name, gcs_folder)
+    upload_directory(project_id, bucket_name, gcs_folder, localdir)
 
 
 if __name__ == "__main__":
