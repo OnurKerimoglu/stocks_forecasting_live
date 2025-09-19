@@ -2,8 +2,6 @@ import json
 import logging
 import os
 
-import tomli
-
 from gcp_functions import load_json_from_gcs
 
 logger = logging.getLogger(__name__)
@@ -102,6 +100,8 @@ def get_pipreqs_from_pyproject(path: str) -> list[str]:
     Parses your dependencies from pyproject.toml and returns them as a list
     of pip-style requirement strings.
     """
+    import tomli
+
     with open(path, "rb") as f:
         pyproject = tomli.load(f)
 
