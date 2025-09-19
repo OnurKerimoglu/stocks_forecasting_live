@@ -94,6 +94,7 @@ def_model, def_metadata = retrieve_model(
     model_id="default",  # will try to load from local EXTRACTED_MODEL_DIRNAME
     env="prod",  # if the local load fails, load from GCS, (if model_id=default, model pointed by promotion_status)
 )
+logger.info(f"cached default model info: {def_metadata}")
 
 
 def stocks_forecasting_inference_flow(
@@ -116,9 +117,11 @@ def stocks_forecasting_inference_flow(
 def fetch_model(model_id: str) -> tuple:
     if model_id == "default":
         # use the cached model
+        logger.info("Using cached model")
         model, metadata = def_model, def_metadata
     else:
         # retrieve the model
+        logger.info(f"Requested to use alternative model: {model_id}")
         model, metadata = retrieve_model(model_id)
     return model, metadata
 
@@ -397,7 +400,7 @@ def forecast_endpoint() -> dict:
     ticker = p.get("ticker", "NA")
     past_horizon = p.get("past_horizon", 1)
     model_id = p.get("model_id", "default")
-    print(f"{ticker} with past_horizon: {past_horizon}")
+    print(f"{ticker} with past_horizon: {past_horizon}; will use model_id: {model_id}")
     print(
         f"forecasting for: {ticker} with past_horizon: {past_horizon} via {signature_name} service"
     )
@@ -455,8 +458,9 @@ def forecast_endpoint_from_symbol() -> dict:
     p = load_json_maybe_compressed(raw, enc)
     ticker = p.get("ticker", "NA")
     past_horizon = p.get("past_horizon", 1)
-    print(f"{ticker} with past_horizon: {past_horizon}")
-    result, meta = forecast_from_symbol(ticker, past_horizon)
+    model_id = p.get("model_id", "default")
+    print(f"{ticker} with past_horizon: {past_horizon}; will use model_id: {model_id}")
+    result, meta = forecast_from_symbol(ticker, past_horizon, model_id)
     meta["api_endpoint"] = "/v1/forecast/from_symbol"
     meta["ticker"] = ticker
     headers = {
@@ -487,13 +491,14 @@ def forecast_endpoint_from_series() -> dict:
     p = load_json_maybe_compressed(raw, enc)
     ticker = p.get("ticker", "NA")
     past_horizon = p.get("past_horizon", 1)
-    print(f"{ticker} with past_horizon: {past_horizon}")
+    model_id = p.get("model_id", "default")
+    print(f"{ticker} with past_horizon: {past_horizon}; will use model_id: {model_id}")
     series = p.get("series") or None
     if series is None:
         print("no series was provided, defaulting to from_symbol service")
-        result, meta = forecast_from_symbol(ticker, past_horizon)
+        result, meta = forecast_from_symbol(ticker, past_horizon, model_id)
     else:
-        result, meta = forecast_from_data(ticker, past_horizon, series)
+        result, meta = forecast_from_data(ticker, past_horizon, series, model_id)
     meta["api_endpoint"] = "/v1/forecast/from_data"
     meta["ticker"] = ticker
     headers = {
