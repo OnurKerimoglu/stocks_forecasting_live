@@ -222,13 +222,18 @@ def remove_raw_data(rawdatapath: str, datasource: str) -> None:
         raw_data_fpath = os.path.join(
             rawdatapath, "kaggle", "World-Stock-Prices-Dataset.csv"
         )
-        if os.path.exists(raw_data_fpath):
-            logger.info(f"Removing the raw data @ {raw_data_fpath}")
-            os.remove(raw_data_fpath)
-        else:
-            logger.info(f"Raw data not found @ {raw_data_fpath}")
+    elif datasource == "yahoofinance":
+        raw_data_fpath = os.path.join(
+            rawdatapath, "yf", "Stock-Prices-Ref-Dataset_YF.csv"
+        )
     else:
         raise ValueError(f"Unknown datasource: {datasource}")
+
+    if os.path.exists(raw_data_fpath):
+        logger.info(f"Removing the raw data @ {raw_data_fpath}")
+        os.remove(raw_data_fpath)
+    else:
+        logger.info(f"Raw data not found @ {raw_data_fpath}")
 
 
 def sample_tickers_dates(

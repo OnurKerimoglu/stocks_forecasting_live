@@ -7,19 +7,21 @@ Here a more colorful flowchart than shown in the readme:
 ## Model Training
 
 ### Workflow
-Training workflow, i.e., stocks_forecasting_training_flow `flow` provided by the [main_training.py](../main_training.py), consists of 4 `task`s:
+Training workflow, i.e., stocks_forecasting_training_flow `flow` provided by the [main_training.py](../main_training.py), consists of the following `task`s:
 1. Base data preparation (task)
     - Get the raw data
-    - Clean the raw data
     - Sample tickers and dates
+    - Store sample data in gcs
     - Split train and test
 2. Run experiments (task)
-    - Prepare features
-    - Train the model
+    - Initialize a preporocessor-model pipeline based on exp pars
+    - Fit the model (i.e., prepare features and train the model)
     - Evaluate the model
     - Log the model, parameters, metrics to mlfow
 3. Register the best model (task)
-4. Cleanup (task)
+4. Export the best model to local MLFLOWPATH (task)
+5. Uload the best model to GCP (task)
+6. Cleanup (task)
 
 ### Experiment Tracking and Model Registry
 Experiments will be conducted according to the configuration files in the `config`  directory under the project root. Here, the factors and their levels to be experimented with are provided as a yaml file, which will be read by [create_experiments.py](../src/create_experiments.py), and converted to an experiment dictionary following a full factorial design. For example, config file [Exp_CldrFeats_ModReg.yaml](../config/Exp_CldrFeats_ModReg.yaml):

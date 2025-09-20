@@ -58,7 +58,6 @@ mlflow.set_experiment(EXP_NAME)
 def stocks_forecasting_training_flow(
     env: str = "prod",
     datasource: str = "yahoofinance",
-    localrun: bool = False,
     use_sample_tickers_for_training: bool = True,
     select_only_latest: bool = True,
 ) -> None:
@@ -68,12 +67,12 @@ def stocks_forecasting_training_flow(
     This workflow is orchestrated by prefect and performs the following main and sub-steps:
     1. Base data preparation (task)
         - Get the raw data
-        - Clean the raw data
         - Sample tickers and dates
+        - Store sample data in gcs
         - Split train and test
     2. Run experiments (task)
-        - Prepare features
-        - Train the model
+        - Initialize a preporocessor-model pipeline based on exp pars
+        - Fit the model (i.e., prepare features and train the model)
         - Evaluate the model
         - Log the model, parameters, metrics to mlfow
     3. Register the best model (task)
@@ -106,7 +105,7 @@ def stocks_forecasting_training_flow(
             use_sample_tickers_for_training = False
     sample_fdir = os.path.join(DATAPATH, f"{SAMPLEPATHROOT}_{env}")
     df, df_train, df_test = base_data_prep(
-        datasource, localrun, env, use_sample_tickers_for_training, sample_fdir
+        datasource, env, use_sample_tickers_for_training, sample_fdir
     )
 
     # step 2: run experiments (task)
@@ -144,7 +143,6 @@ def stocks_forecasting_training_flow(
 @task(task_run_name="base_data_prep_taskgroup")
 def base_data_prep(
     datasource: str,
-    localrun: str,
     env: str,
     use_sample_tickers_for_training: bool,
     sample_fdir: str | None = None,
@@ -153,7 +151,7 @@ def base_data_prep(
     df_raw, access_date_str = load_raw_data(
         datasource=datasource,
         datapath=DATAPATH,
-        localrun=localrun,
+        localrun=True,
         env=env,
         user="nelgiriyewithana",
         datasetname="world-stock-prices-daily-updating",
@@ -353,7 +351,6 @@ if __name__ == "__main__":
     stocks_forecasting_training_flow(
         env="test",
         datasource="yahoofinance",
-        localrun=True,
         use_sample_tickers_for_training=True,
         select_only_latest=True,
     )
