@@ -135,7 +135,7 @@ def summarize_metadata(metadata: dict) -> dict:
         "model_version": metadata.get("version", "NA"),
         "model_run_id": metadata.get("run_id", "NA"),
         "model_uri": runinfo.get("_artifact_uri", "NA"),
-        "model_commit_id": tags.get("mlflow.source.git.commit", "NA"),
+        # "model_commit_id": tags.get("mlflow.source.git.commit", "NA"),
         "model_trained_at": tags.get("run_date", "NA"),
         "params": metadata.get("params", "NA"),
     }
