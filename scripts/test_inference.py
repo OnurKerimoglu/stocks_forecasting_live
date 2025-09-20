@@ -258,8 +258,8 @@ if __name__ == "__main__":
         type=str,
         required=False,
         help="forecasting endpoint; options: forecast, forecast/from_symbol, forecast/from_series",
-        # default="v2/forecast"
-        default="v1/forecast/from_data",
+        default="v2/forecast",
+        # default="v1/forecast/from_data",
         # default="v1/forecast/from_symbol",
     )
     parser.add_argument(
