@@ -127,15 +127,17 @@ def fetch_model(model_id: str) -> tuple:
 
 
 def summarize_metadata(metadata: dict) -> dict:
+    runinfo = metadata.get("run_info", {})
+    tags = metadata.get("tags", {})
     metadata_summary = {
-        "model_registry_name": metadata["registry_name"],
-        "model_alias": metadata["model_alias"],
-        "model_version": metadata["version"],
-        "model_run_id": metadata["run_id"],
-        "model_uri": metadata["run_info"]["_artifact_uri"],
-        "model_commit_id": metadata["tags"]["mlflow.source.git.commit"],
-        "model_trained_at": metadata["tags"]["run_date"],
-        "params": metadata["params"],
+        "model_registry_name": metadata.get("registry_name", "NA"),
+        "model_alias": metadata.get("model_alias", "NA"),
+        "model_version": metadata.get("version", "NA"),
+        "model_run_id": metadata.get("run_id", "NA"),
+        "model_uri": runinfo.get("_artifact_uri", "NA"),
+        "model_commit_id": tags.get("mlflow.source.git.commit", "NA"),
+        "model_trained_at": tags.get("run_date", "NA"),
+        "params": metadata.get("params", "NA"),
     }
     return metadata_summary
 
@@ -541,5 +543,5 @@ def index() -> tuple:
 #     data_dict=None,
 #     past_horizon=1,
 #     # model_id="default"
-#     model_id="fb7f10cfb2b547c4ab33a1e7ee4e3d91"
+#     model_id="0dccfe1eba9748399101883ac7fd5734"
 # )
