@@ -6,7 +6,9 @@ import requests
 import streamlit as st
 
 
-def call_api(ticker: str, past_horizon: int, env: str, endpoint: str) -> dict:
+def call_api(
+    ticker: str, past_horizon: int, model_id: str, env: str, endpoint: str
+) -> dict:
     if env == "local":
         API_URL = "http://0.0.0.0:9696"
     else:
@@ -19,6 +21,7 @@ def call_api(ticker: str, past_horizon: int, env: str, endpoint: str) -> dict:
             "ticker": ticker,
             "past_horizon": past_horizon,
             "signature_name": "from_symbol",
+            "model_id": model_id,
         }
     # resp = requests.post(f"{API_URL}/{endpoint}", json=pl_in, timeout=30)
     # resp.raise_for_status()
@@ -184,6 +187,9 @@ def build_chart(data: dict, meta: dict, ticker: str) -> go.Figure:
 def main() -> None:
     st.set_page_config(page_title="Stock Price Forecast", layout="wide")
     st.title("📈 Stock Price Forecast")
+    st.markdown(
+        "**No invesment advice! This is just a demo of a Machine Learning Project in development**"
+    )
 
     # --- Sidebar controls ---
     st.sidebar.header("Query Parameters")
@@ -194,18 +200,20 @@ def main() -> None:
     #     max_value=40,
     #     value=20,
     #     step=5,
-    # )
+    # )0dccfe1eba9748399101883ac7fd5734
     # past_horizon = max(past_horizon, 1)  # ensure at least one day
     past_horizon = 20
+    model_id = st.sidebar.text_input("model-id", value="default", max_chars=32)
     env = st.secrets["global"]["env"]
     endpoint = st.secrets["global"]["endpoint"]
-    debug_flag = st.secrets["global"]["debug"]
+    # debug_flag = st.secrets["global"]["debug"]
+    debug_flag = st.sidebar.checkbox("Debug", value=False)
     if st.sidebar.button("Fetch & Plot"):
         with st.spinner("Contacting API…"):
             try:
                 if debug_flag:
                     st.write(f"Calling API for {env} env")
-                payload = call_api(ticker, past_horizon, env, endpoint)
+                payload = call_api(ticker, past_horizon, model_id, env, endpoint)
                 data = payload["data"]
                 meta = payload.get("meta", None)
                 if debug_flag and meta is not None:
