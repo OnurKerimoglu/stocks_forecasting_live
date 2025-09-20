@@ -2,7 +2,6 @@ import gzip
 import json
 import logging
 import os
-import pickle
 import uuid
 from datetime import UTC, datetime
 
@@ -10,27 +9,26 @@ import mlflow
 import numpy as np
 import pandas as pd
 from flask import Flask, Response, abort, g, jsonify, make_response, request
-from mlflow.tracking import MlflowClient
+from pandas.tseries.offsets import BDay
 from werkzeug.exceptions import BadRequest, HTTPException
 from xgboost import XGBRegressor
 
-from data import (
-    build_features,
-    clean_raw_data,
-    create_X_y_multistep,
-)
+from gcp_functions import blob_exists, load_json_from_gcs
+from load_configs import Configs
 from raw_data_yf import fetch_ticker_data_from_yf
+from utils import resolve_model_bundle_uri_for_env
 
 # Global parameters
 SERVICE_VERSION = "forecast-api@0.2.0"
-mlflow.set_tracking_uri("http://127.0.0.1:5000")
-CLIENT = MlflowClient()
+ROOTPATH = os.path.dirname(__file__)
+MODELPATH = os.path.join(ROOTPATH, "models")
+MLFLOWPATH = os.path.join(MODELPATH, "mlflow_runs")
+EXTRACTED_MODEL_DIRNAME = "extracted_model"
 MODEL_ARTIFACT_FOLDER = "mlflow_models"
-REGISTRY_NAME = "stocks_forecasting_candidates"  # The registry from which the models should be pulled from
-MODEL_ALIAS = "champion"
-
-rootpath = os.path.dirname(__file__)
-MODELPATH = os.path.join(rootpath, "data", "extracted_model")
+# Derived global parameters
+config_cloud = Configs().cloud
+GCP_PROJECT = config_cloud["gcs"]["project"]
+GCP_BUCKET = config_cloud["gcs"]["mlflow_bucket"]
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -38,79 +36,110 @@ logging.basicConfig(
 )
 
 
+def retrieve_model_from_gcs(model_id: str, env: str = "prod") -> tuple:
+    if model_id == "default":
+        # read the model uri from promotion state
+        bundle_uri, manifest = resolve_model_bundle_uri_for_env(
+            env=env,
+            gcp_project=GCP_PROJECT,
+            gcp_bucket=GCP_BUCKET,
+            status_blob="promotion_status.json",
+            local_status_path=os.path.join(MODELPATH, "promotion_status.json"),
+        )
+        logger.info(
+            f"from gcs load default {env} model pointed by promotion_status: {manifest}"
+        )
+    else:
+        bundle_uri = f"gs://{GCP_BUCKET}/runs/{model_id}"
+        logger.info(f"from gcs load requested model: {model_id}")
+
+    if not blob_exists(GCP_PROJECT, GCP_BUCKET, bundle_uri):
+        raise FileNotFoundError(f"{bundle_uri} was not found")
+
+    model_uri = f"{bundle_uri}/{MODEL_ARTIFACT_FOLDER}"
+    loaded_pipeline = mlflow.sklearn.load_model(model_uri)
+    model_dirname = model_uri.split(GCP_BUCKET + "/")[1]
+    metadata = load_json_from_gcs(
+        GCP_PROJECT, GCP_BUCKET, f"{model_dirname}/metadata.json"
+    )
+    return loaded_pipeline, metadata
+
+
+def retrieve_local_model(model_id: str) -> tuple:
+    if model_id == "default":
+        print(f"loading default model from the local {EXTRACTED_MODEL_DIRNAME}")
+        mlmodeldir = os.path.join(
+            MODELPATH, EXTRACTED_MODEL_DIRNAME, MODEL_ARTIFACT_FOLDER
+        )
+    else:
+        mlmodeldir = os.path.join(MLFLOWPATH, model_id, MODEL_ARTIFACT_FOLDER)
+    if not os.path.exists(mlmodeldir):
+        raise FileNotFoundError(f"{mlmodeldir} was not found")
+    loaded_pipeline = mlflow.sklearn.load_model(mlmodeldir)
+    metadata_fpath = os.path.join(mlmodeldir, "metadata.json")
+    with open(metadata_fpath) as f:
+        metadata = json.load(f)
+    return loaded_pipeline, metadata
+
+
+def retrieve_model(model_id: str, env: str | None = "prod") -> tuple:
+    try:
+        return retrieve_local_model(model_id)
+    except FileNotFoundError:
+        return retrieve_model_from_gcs(model_id, env=env)
+
+
+# cache default model, params and metadata
+def_model, def_metadata = retrieve_model(
+    model_id="default",  # will try to load from local EXTRACTED_MODEL_DIRNAME
+    env="prod",  # if the local load fails, load from GCS, (if model_id=default, model pointed by promotion_status)
+)
+logger.info(f"cached default model info: {def_metadata}")
+
+
 def stocks_forecasting_inference_flow(
     ticker: str = "AAPL",
     data_dict: dict | None = None,
-    use_model_registry: bool = False,
     past_horizon: int = 1,
+    model_id: str = "default",
 ) -> None:
-    if use_model_registry:
-        model, params, metadata = retrieve_registered_model()
-    else:
-        model, params, metadata = retrieve_locally_stored_model()
+    model, metadata = fetch_model(model_id)
+    meta_summary = summarize_metadata(metadata)
     if data_dict is None:
         df_init = retrieve_ticker_data(ticker)
     else:
         df_init = handle_series_data(data_dict, ticker)
-    past, forecast = run_forecast(model, params, df_init, past_horizon=past_horizon)
-    logger.info(f"\npast:\n{past}\nforecast:\n{forecast}")
-    meta = {
-        "model_registry_name": metadata["registry_name"],
-        "model_alias": metadata["model_alias"],
-        "model_version": metadata["version"],
-        "model_run_id": metadata["run_id"],
-        "model_uri": metadata["run_info"]["_artifact_uri"],
-        "model_commit_id": metadata["tags"]["mlflow.source.git.commit"],
-        "model_trained_at": metadata["tags"]["run_date"],
-        "params": params,
+    past, forecast = run_forecast(model, df_init, past_horizon=past_horizon)
+    logger.info(f"\nmodel info:{meta_summary}\npast:\n{past}\nforecast:\n{forecast}")
+    return past, forecast, meta_summary
+
+
+def fetch_model(model_id: str) -> tuple:
+    if model_id == "default":
+        # use the cached model
+        logger.info("Using cached model")
+        model, metadata = def_model, def_metadata
+    else:
+        # retrieve the model
+        logger.info(f"Requested to use alternative model: {model_id}")
+        model, metadata = retrieve_model(model_id)
+    return model, metadata
+
+
+def summarize_metadata(metadata: dict) -> dict:
+    runinfo = metadata.get("run_info", {})
+    tags = metadata.get("tags", {})
+    metadata_summary = {
+        "model_registry_name": metadata.get("registry_name", "NA"),
+        "model_alias": metadata.get("model_alias", "NA"),
+        "model_version": metadata.get("version", "NA"),
+        "model_run_id": metadata.get("run_id", "NA"),
+        "model_uri": runinfo.get("_artifact_uri", "NA"),
+        # "model_commit_id": tags.get("mlflow.source.git.commit", "NA"),
+        "model_trained_at": tags.get("run_date", "NA"),
+        "params": metadata.get("params", "NA"),
     }
-    return past, forecast, meta
-
-
-def retrieve_registered_model() -> tuple:
-    # Load the model from the Model Registry
-    model_uri = f"models:/{REGISTRY_NAME}@{MODEL_ALIAS}"
-    logger.info(f"Retrieveing model_uri: {model_uri}")
-    model = mlflow.sklearn.load_model(model_uri)
-    # Get the parameters
-    mv = CLIENT.get_model_version_by_alias(name=REGISTRY_NAME, alias=MODEL_ALIAS)
-    run = CLIENT.get_run(mv.run_id)
-    params = run.data.params
-    metadata = extract_metadata(
-        mv.run_id, run.info.__dict__, run.data.tags, run.data.metrics
-    )
-    metadata["aliases"] = "-".join(mv.aliases)
-    metadata["version"] = mv.version
-    return model, params, metadata
-
-
-def extract_metadata(
-    run_id: str, run_info: dict, run_tags: dict, run_metrics: dict
-) -> dict:
-    metadata = {}
-    metadata["registry_name"] = REGISTRY_NAME
-    metadata["model_alias"] = MODEL_ALIAS
-    metadata["run_id"] = run_id
-    metadata["run_info"] = run_info
-    metadata["tags"] = run_tags
-    metadata["metrics"] = run_metrics
-    return metadata
-
-
-def retrieve_locally_stored_model() -> tuple:
-    fpath = os.path.join(MODELPATH, "model.pkl")
-    logger.info(f"Loading model from: {fpath}")
-    with open(fpath, "rb") as f:
-        model = pickle.load(f)
-    fpath = os.path.join(MODELPATH, "params.json")
-    logger.info(f"Loading params from: {fpath}")
-    with open(fpath) as f:
-        params = json.load(f)
-    fpath = os.path.join(MODELPATH, "metadata.json")
-    logger.info(f"Loading metadata from: {fpath}")
-    with open(fpath) as f:
-        metadata = json.load(f)
-    return model, params, metadata
+    return metadata_summary
 
 
 def handle_series_data(data_dict: dict, ticker: str) -> pd.DataFrame:
@@ -124,55 +153,41 @@ def handle_series_data(data_dict: dict, ticker: str) -> pd.DataFrame:
     })
     if df_raw["Date"].isna().any():
         raise ValueError({"Invalid 'date' value(s). Use ISO-8601 like 'YYYY-MM-DD'."})
-    # clean the raw data, but do not winsorize
-    df_clean = clean_raw_data(df_raw, winsorize=False)
-    df_clean.sort_values(["Date"], inplace=True)
-    return df_clean
+    df_raw.sort_values(["Date"], inplace=True)
+    return df_raw
 
 
 def retrieve_ticker_data(ticker: str) -> pd.DataFrame:
     # download the raw data
     df_raw = fetch_ticker_data_from_yf(ticker=ticker)
-    # clean the raw data, but do not winsorize
-    df_clean = clean_raw_data(df_raw, winsorize=False)
-    df_clean.sort_values(["Date"], inplace=True)
-    return df_clean
+    df_raw.sort_values(["Date"], inplace=True)
+    return df_raw
 
 
 def run_forecast(
-    model: XGBRegressor,
-    parameters: dict,
+    pp_model_pl: XGBRegressor,
     df_init: pd.DataFrame,
     bizday_offset: bool = True,
     past_horizon: int = 1,
 ) -> tuple:
     # Build features on recent history
-    CldrFeats = parameters["CldrFeats"] if "CldrFeats" in parameters.keys() else "True"
-    CldrFeats = True if CldrFeats == "True" else False
-    df_feats, _ = build_features(
-        df_init, lags=int(parameters["lags"]), CldrFeats=CldrFeats
-    )
-    # create features for the very last day, so specify only 1 step ahead in the future to avoid losing the features
-    X_train, y_train = create_X_y_multistep(df_feats, steps=1, target="returns")
-    # Grab the last row of features (drop identifiers)
-    X_step = X_train.iloc[[-1], :]
+    X_init, y_init = pp_model_pl.make_X_y(df_init)
 
-    # Predicted returns
-    y_hat = model.predict(X_step)[0]
+    # Grab the last row of features (drop identifiers)
+    X_step = X_init.iloc[[-1], :]
+
+    # Predict returns
+    y_hat = pp_model_pl.estimator_.predict(X_step)[0]
 
     # Generate the timestamps (business days)
     last_date = df_init["Date"].max()
+    steps = len(y_hat)
     if bizday_offset:
-        from pandas.tseries.offsets import BDay
-
-        dates_ts = [last_date + BDay(i) for i in range(0, int(parameters["steps"]) + 1)]
+        dates_ts = [last_date + BDay(i) for i in range(0, steps + 1)]
     else:
-        dates_ts = [
-            last_date + pd.Timedelta(days=i)
-            for i in range(0, int(parameters["steps"]) + 1)
-        ]
+        dates_ts = [last_date + pd.Timedelta(days=i) for i in range(0, steps + 1)]
     dates = [timestamp.date() for timestamp in dates_ts]
-    last_return = y_train.iloc[-1].values[0]
+    last_return = y_init.iloc[-1].values[0]
     returns = np.append(last_return, y_hat)
     returns_series = pd.Series(returns, index=dates, name="Returns")
 
@@ -197,9 +212,11 @@ def run_forecast(
     return past_prices, forecast
 
 
-def forecast_from_symbol(ticker: str, past_horizon: int) -> dict:
+def forecast_from_symbol(
+    ticker: str, past_horizon: int, model_id: str = "default"
+) -> dict:
     past, forecast, meta = stocks_forecasting_inference_flow(
-        ticker, use_model_registry=False, past_horizon=past_horizon
+        ticker, past_horizon=past_horizon, model_id=model_id
     )
     # make Date a column instead of the index
     ld = past.reset_index()
@@ -213,7 +230,9 @@ def forecast_from_symbol(ticker: str, past_horizon: int) -> dict:
     return result, meta
 
 
-def forecast_from_data(ticker: str, past_horizon: int, series: dict) -> dict:
+def forecast_from_data(
+    ticker: str, past_horizon: int, series: dict, model_id: str = "default"
+) -> dict:
     dates = series.get("date")
     closes = series.get("close")
 
@@ -240,10 +259,7 @@ def forecast_from_data(ticker: str, past_horizon: int, series: dict) -> dict:
     print("data validated, forecasting..")
     # Run your inference flow that accepts a pre-supplied price series
     past, forecast, meta = stocks_forecasting_inference_flow(
-        ticker=ticker,
-        data_dict=data_dict,
-        use_model_registry=False,
-        past_horizon=past_horizon,
+        ticker=ticker, data_dict=data_dict, past_horizon=past_horizon, model_id=model_id
     )
 
     # make Date a column instead of the index
@@ -374,7 +390,8 @@ def forecast_endpoint() -> dict:
         "date":  ["2025-07-21", "2025-07-22", ...],
         "close": [231.14,       233.02,      ...]
       }
-      "past_horizon": 1
+      "past_horizon": 1,
+      "model_id": "abc123",
     }
     """
     print("forecasting from data for symbol:", end="")
@@ -384,21 +401,24 @@ def forecast_endpoint() -> dict:
     signature_name = p.get("signature_name", "NA")
     ticker = p.get("ticker", "NA")
     past_horizon = p.get("past_horizon", 1)
-    print(f"{ticker} with past_horizon: {past_horizon}")
+    model_id = p.get("model_id", "default")
+    print(f"{ticker} with past_horizon: {past_horizon}; will use model_id: {model_id}")
     print(
         f"forecasting for: {ticker} with past_horizon: {past_horizon} via {signature_name} service"
     )
 
     try:
         if signature_name == "from_symbol":
-            result, meta = forecast_from_symbol(ticker, past_horizon)
+            result, meta = forecast_from_symbol(ticker, past_horizon, model_id)
         elif signature_name == "from_data":
             series = p.get("series") or None
             if series is None:
                 print("no series was provided, defaulting to from_symbol service")
-                result, meta = forecast_from_symbol(ticker, past_horizon)
+                result, meta = forecast_from_symbol(ticker, past_horizon, model_id)
             else:
-                result, meta = forecast_from_data(ticker, past_horizon, series)
+                result, meta = forecast_from_data(
+                    ticker, past_horizon, series, model_id
+                )
         else:
             abort(400, description=f"Unsupported signature_name: {signature_name}")
     except ValueError as e:
@@ -440,8 +460,9 @@ def forecast_endpoint_from_symbol() -> dict:
     p = load_json_maybe_compressed(raw, enc)
     ticker = p.get("ticker", "NA")
     past_horizon = p.get("past_horizon", 1)
-    print(f"{ticker} with past_horizon: {past_horizon}")
-    result, meta = forecast_from_symbol(ticker, past_horizon)
+    model_id = p.get("model_id", "default")
+    print(f"{ticker} with past_horizon: {past_horizon}; will use model_id: {model_id}")
+    result, meta = forecast_from_symbol(ticker, past_horizon, model_id)
     meta["api_endpoint"] = "/v1/forecast/from_symbol"
     meta["ticker"] = ticker
     headers = {
@@ -472,13 +493,14 @@ def forecast_endpoint_from_series() -> dict:
     p = load_json_maybe_compressed(raw, enc)
     ticker = p.get("ticker", "NA")
     past_horizon = p.get("past_horizon", 1)
-    print(f"{ticker} with past_horizon: {past_horizon}")
+    model_id = p.get("model_id", "default")
+    print(f"{ticker} with past_horizon: {past_horizon}; will use model_id: {model_id}")
     series = p.get("series") or None
     if series is None:
         print("no series was provided, defaulting to from_symbol service")
-        result, meta = forecast_from_symbol(ticker, past_horizon)
+        result, meta = forecast_from_symbol(ticker, past_horizon, model_id)
     else:
-        result, meta = forecast_from_data(ticker, past_horizon, series)
+        result, meta = forecast_from_data(ticker, past_horizon, series, model_id)
     meta["api_endpoint"] = "/v1/forecast/from_data"
     meta["ticker"] = ticker
     headers = {
@@ -516,6 +538,10 @@ def index() -> tuple:
 
 # if __name__ == "__main__":
 #     app.run(debug=True, host="0.0.0.0", port=9696)
-# forecast_from_symbol(
-#     ticker="AAPL", past_horizon=5
+# stocks_forecasting_inference_flow(
+#     ticker="AAPL",
+#     data_dict=None,
+#     past_horizon=1,
+#     # model_id="default"
+#     model_id="0dccfe1eba9748399101883ac7fd5734"
 # )

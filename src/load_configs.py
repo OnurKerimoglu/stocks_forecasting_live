@@ -16,7 +16,7 @@ class Configs:
         self.cloud = {}
         self.cloud["gcs"] = self.load_cloud_config(env=env, config_key="gcs")
 
-    def load_cloud_config(self, env: str, config_key: str) -> dict:
+    def load_cloud_config(self, env: str | None, config_key: str) -> dict:
         print(f"loading gcs configs for {env}")
         cloud_fpath = self.config_paths[config_key]
         with open(cloud_fpath) as f:

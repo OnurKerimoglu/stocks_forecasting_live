@@ -23,23 +23,9 @@ A first model is already online as a REST API (technical details below). I decid
 > Once it’s running, enter the ticker symbol, click `Fetch and Plot`, and you’ll see a chart like this, combining the latest historical data with the 5-day forecast:
 <img src="documentation/images/demo.png" width=500 />
 
-## Tech stack and Solution Architecture
+## Solution Architecture and Tech Stack
 
-| Process | Tooling |
-|---------|---------|
-| Infrastructure as Code | **Terraform** |
-| Experiment tracking & model registry | **Mlflow** |
-| Store & version models / training artifacts | **Google Cloud Storage (GCS)** |
-| Orchestrate and schedule workflows | **Prefect** |
-| Expose REST API | **Flask** |
-| Containerization and image storage | **Docker** + **Artifact Registry** |
-| Autoscale & deploy | **Cloud Run** |
-| Data & model monitoring | **Grafana + Evidently AI** |
-| Code quality | **Ruff** (lint/format) + **Pytest** (unit tests) |
-| CI/CD | **GitHub Actions** |
-
-
-Here is an L3 flowchart of the solution architecture (may require a mermaid previewer extension for correct visualisation on your IDE. See the [documentation](documentation/documentation.md) for a more colorful, png version):
+Here is a tool-agnostic Level-3 flowchart of the solution architecture (rendering in IDE may require a Mermaid previewer extension).
 
 ```mermaid
 ---
@@ -52,63 +38,71 @@ config:
  subgraph Ext["External Data"]
         DSource["Kaggle/YahooFinance"]
   end
- subgraph Shared["Shared Modules"]
-        DataPP["Data Preprocessing"]
-        Predictor["Estimation"]
-  end
  subgraph Training["Training"]
-        Pr["Prefect"]
-        Mlf["MLflow"]
+        Pr["Orchestrator"]
+        Tracker["Experiment Tracker"]
+        Registry["Model Registry"]
   end
  subgraph Serving["Inference"]
-        GHA["GitHub Actions"]
-        Flask["Flask App"]
-        AR["Artifact Registry"]
-        CE["Cloud Run"]
-        RAPI["Rest API"]
-        Container["Docker Container"]
+        CICD["CI/CD"]
+        AR["Image Registry"]
+        CE["Compute"]
+        RAPI["REST API"]
+        Container["Container Image"]
   end
  subgraph Monitoring["Monitoring"]
         DV["Data Versioning"]
-        Ev["Evidently AI"]
-        Mdashboards["Grafana"]
-        DB["Postgres"]
+        Ev["Metric Calculator"]
+        Mdashboards["Monitoring Dashboard"]
+        DB[("Metric DB")]
   end
- subgraph MLPl["Machine Learning Platform"]
-        MLE["ML Engineer"]
-        MlDl[("GCS")]
-        Shared
+ subgraph MLPl["Machine Learning System"]
+        MlDl[("Data Lake")]
         Training
         Serving
         Monitoring
   end
     DSource --> Pr
-    DataPP -- Features --> Predictor
-    Predictor -- Estimations --> Mlf
-    Predictor-- Estimations --> DV
-    Shared --> Flask
-    Pr --> Mlf
-    Mlf -- Models --> MlDl & Predictor
-    Mlf -- Parameters --> MlDl & Predictor
-    Mlf -- Data --> DataPP
-    MlDl -- Model --> GHA
-    Flask --> GHA
-    GHA -- CI/CD --> Container
+    Pr -- Experiments --> Tracker
+    Tracker -- Metrics --> Registry
+    Registry -- Promotion Status --> MlDl
+    Registry -- Models --> MlDl
+    MlDl -- Default Model --> Container
+    CICD -- Trigger on PR --> Container
     Container -- Publish --> AR
     AR -- Deployment --> CE
-    CE -- Serves --> RAPI
+    MlDl -- Alternative Models --> RAPI
+    CE -- Runs --> RAPI
     MlDl -- Ref Model --> DV
-    MlDl -- Ref Parameters --> DV
     DV -- Reference Data --> MlDl
     DV -- New Data --> MlDl
     DV -- Ref vs. New Features & Estimations --> Ev
     Ev -- Daily KPIs --> DB
     DB -- Aggregate KPIs --> Mdashboards
-    MLE -- Trigger --> Pr
-    Mdashboards --> MLE
+    Mdashboards -- Trigger --> Pr
     User -- Recent Data --> RAPI
-    RAPI -- Forecasts --> User
+    RAPI -- Forecasts, Model Metadata --> User
 ```
+
+The purpose of each component (including those that are not shown in the diagram), and the specific tools used in this project are as follows:
+| Component | Purpose | Tooling |
+|---------|---------|---------|
+|Infrastructure as Code | Provision/destroy cloud resources | **Terraform** |
+|Experiment tracker | Organize and evaluate experiment runs | **MLflow** |
+|Model registry | Register models and manage stages | **MLflow** |
+|Data Lake | Store & version models / training artifacts | **Google Cloud Storage (GCS)** |
+|Orchestrator | Orchestrate and schedule workflows | **Prefect** |
+|REST API | Expose inference endpoints | **Flask** |
+|Container Image | Package code and dependencies | **Docker** |
+|Image Registry  | Stores and serves container images |  **Artifact Registry** |
+|Compute | Runs the containerized service | **Cloud Run** |
+|Metric Calculator | Calculate data distribution and model performance metrics | **Evidently AI** |
+|Metric DB | Persist daily/aggregated metrics | Postgres
+|Monitoring Dashboard | Display metrics | **Grafana** |
+|Linter   | Check/fix code quality | **Ruff** |
+|Tester   | Run unit tests | **Pytest**|
+|CI/CD    | Automated integration & delivery | **GitHub Actions** |
+
 
 ## Instructions for Reproduction
 ### Prerequisites and Initial Setup
@@ -152,11 +146,11 @@ This project uses GCP services for deployment, managed by [Hashicorp Terraform](
 - In the cloud, three environments are defined: `prod`, `dev` and `test`. The former two correspond to the primary branches of the git repository, whereas any other branch (e.g., `feature/xyz`) is supposed to communicate with the `test` environment.
 
 
-### Training Worfklow
-The training workflow is described in [documentation](./documentation/documentation.md#workflow). For experimenting the feature engineering and model-specific options and choosing the best model, Mlflow is used, and the whole workflow is orchestrated by Prefect. Operational instructions are provided in the next sections.
+### Model Training
+The training workflow is described in [documentation](./documentation/documentation.md#workflow). The two  workflows involved in model training are 1) running experiments and registering the winners with `candidate` alias with MLflow and as orchestreated by Prefect (see: [main_training.py](main_training.py)); 2) model staging management with MLflow (see: [main_promotion.py](main_promotion.py)). Operational instructions are provided in the next sections.
 
 #### Experiment Tracking and Model Registry
-is handled by [mlflow](https://mlflow.org/). To activate mlflow server, simply open a new terminal, activate the venv and issue `make mlflow_serve` (see the [Makefile](Makefile)). On a browser, navigate to `http://localhost:5000` to access the Mlflow GUI. To stop the server, hit Ctrl+C on the terminal.  See [the documentation](./documentation/documentation.md#experiment-tracking-and-model-registry) for the details on experiment tracking and model registry.
+is handled by [mlflow](https://mlflow.org/). To activate mlflow server, simply open a new terminal, activate the venv and issue `make mlflow_serve` (see the [Makefile](Makefile)). On a browser, navigate to `http://localhost:5000` to access the MLflow GUI. To stop the server, hit Ctrl+C on the terminal.  See [the documentation](./documentation/documentation.md#experiment-tracking-and-model-registry) for the details on experiment tracking and model registry.
 
 #### Initiating the Orchestrator
 is handled by [prefect](https://www.prefect.io/) (will be installed as a dependency). The workflow deployment requires activation of the mlflow server first (previous section), and comprise the following steps:
@@ -172,24 +166,35 @@ To stop the worker, and the prefect server, hit Ctrl+C in the respective termina
 
 A manual run can be triggered on the `dev` and `test` deployment (on `prod` deployment too, but that one is intended for scheduled runs, see the previous section). The run can be triggered, e.g., on the GUI, Deployments tab, 'Play' button on the top-right corner. Three parameters can be optionally set via 'Custom Run':
   - env (default: 'prod'): this will determine the storage location of the sampled data on GCS
+  - datasource: where the raw data will come from (default: yahoofinance, option: kaggle)
   - use_sample_tickers_for_training (default: True): Only two tickers (['AMZN', 'APPL']) will be used to train the model (these two tickers will be used for the model evaluation anyway, independent of the selection here)
   - select_only_latest (default: True): if True, the best model run will be selected only among runs from the current date, i.e., ignoring the previous runs
 
+#### Promoting models
+Three model stages are defined:
+1. `candidate`: these are the winners of experiments
+2. `challenger`: this is the default model to be used in `dev` environment
+3. `champion`: this is the default model to be used in `prod` environment
+
+Running the experiments will register and update `candidate` models.
+To promote a model from `candidate` to `challenger`, and from `challenger` to `champion`, run: `make model_promote_staging` and `make model_promote_production`, respectively. Model  promotions will be performed based on the chosen metric, and will be logged in a `promotion_status.json` file that will be stored both in the local file system and on the cloud storage (see [main_promotion.py](main_promotion.py)).
+
 ### Inference Pipeline
 The inference pipeline, i.e., the 'stocks_forecasting_inference_flow' function in [main_inference.py](main_inference.py):
-- accepts either of:
-  - the recent price data () with which the forecasts will be made
-  - the ticker symbol, for which the recent data will be retrieved from yahoo finance
-- runs the data preprocessing and feature engineering pipelines (based on the 'champion' parameters so that the data processing for the model training can be reproduced - see the [documentation](documentation/documentation.md))
-- runs the champion model (see the next section)
+- accepts:
+  - `ticker`: the ticker symbol, for which the recent data will be retrieved from yahoo finance
+  - past_horizon (optional, default: 1): number of past days to be returned
+  - data_dict (optional, default: None) the recent price data with which the forecasts will be made
+  - model_id (optional, default: 'default'): the model_id (run_id in MLflow) to be used
+- loads and runs the preprocessing-model pipeline
 - returns the forecasts and the requested amount of recent data
 
 The inference service exposes a REST API (implemented with [Flask](https://palletsprojects.com/projects/flask/)) with one POST endpoint: `/v2/forecast`. Value of the `signature_name` argument in the payload determines using service function forecasting from user-supplied price data (`signature_name=from_data`) or from the ticker symbol (`signature_name=from_symbol`), in which case the app will attempt to fetch the recent data of the symbol with `yfinance`. Here is an overview:
 
 | Method | Path          | Service           | Description                                                 | Example json payload |
 |:------:| ------------- | ----------------- |-------------------------------------------------------------|------------------------|
-| POST   | `/v2/forecast`| forecasting for symbol | Forecasts by ticker symbol; the service fetches recent data  | ```{"signature_name":"from_symbol" "ticker": "AAPL", "past_horizon": 10}``` |
-| POST   | `/v2/forecast` | forecast based on provided data | Forecasts using user-provided recent (closing) price data | ```{"signature_name":"from_data", "ticker": "AAPL", "series": {"date":  ["2025-07-21", "2025-07-22", ...], "close": [231.14,       233.02,      ...]}, "past_horizon": 1}``` |
+| POST   | `/v2/forecast`| forecasting for symbol | Forecasts by ticker symbol; the service fetches recent data  | ```{"signature_name":"from_symbol" "ticker": "AAPL", "past_horizon": 10, "model_id": "abc123"}``` |
+| POST   | `/v2/forecast` | forecast based on provided data | Forecasts using user-provided recent (closing) price data | ```{"signature_name":"from_data", "ticker": "AAPL", "series": {"date":  ["2025-07-21", "2025-07-22", ...], "close": [231.14,       233.02,      ...]}, "past_horizon": 1, "model_id": "abc123"}``` |
 
 Note: two new API version replaced the still supported legacy endpoints, `/v1/forecast/from_symbol` and `v1/forecast/from_data` that did not require `signature_name` argument.
 
@@ -198,8 +203,8 @@ See the following sections for the instructions on building, deploying and testi
 
 #### Local Build and Deployment
 Building the inference pipeline is a two-step process:
-1. Model extraction from mlflow: issue `make extract_registered_model`, only after making sure that the mlflow server is running (if not `make mlflow_serve`). This will query mlflow and get the run_id of the model lineage registered with alias 'champion' (i.e., last version) in the 'stocks_forecasting_candidates' stack, and copy the `model.pkl` and `requirements.txt` artifacts as well as the parameters and model metadata as `params.json` (that contain instructions for data preprocessing, which is necessary for reproducing the features obtained during model training) and `metadata.json` (that contains information such as the registry name, model version and training date) into an `data/extracted_model` folder under project root (after removing its previous contents), and sync the contents of this folder with the GCS `models_bucket` bucket defined in [config/gcs.yml](config/gcs.yml), depending on the current branch that sets the environment (`prod`->`prod`, `dev`->`dev`, otherwise `test`).
-2. Building the container image:  issue `make inference_build_local`. After triggering the `quality_checks` and `tests` targets (see [initial setup](#prerequisites-and-initial-setup)) to catch any obvious flaws, and checking whether the branch is clean state, the [deploy_inference/Dockerfile](deploy_inference/Dockerfile) will pack all necessary files and install packages needed for serving the inference pipeline. The current branch name (in sanitized form) and the (short) SHA of the latest commit will be appended to the tag of the Image-URI to allow tracibility.
+1. Download the extracted model corresponding to the environment: issue `make model_download`. This will call the script [download_extracted_model_from_cloud.py](scripts/download_extracted_model_from_cloud.py) to look up the `promotion_status.json` to find out the correct `run_id` for the current environment (dev: `challenger`; prod: `champion`) and download the model bundle to the local filesystem (including the model metadata)
+2. Building the container image:  issue `make inference_build_local`. After triggering the `quality_checks` and `tests` targets (see [initial setup](#prerequisites-and-initial-setup)) to catch any obvious flaws, and checking whether the branch is clean state, the [deploy_inference/Dockerfile](deploy_inference/Dockerfile) will pack all necessary dependencies and install packages needed for serving the inference pipeline. The current branch name (in sanitized form) will be appended to the tag of the Image-URI.
 
 For testing local code  (e.g., a feature branch that has not been published yet), this container can be deployed locally with `make inference_serve_local`. This will start the flask app at `http://0.0.0.0:9696`
 

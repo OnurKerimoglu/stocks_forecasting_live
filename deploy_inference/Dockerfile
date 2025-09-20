@@ -14,12 +14,13 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 # Copy project metadata and source files for editable install
 COPY deploy_inference/setup.py ./
-COPY src/* ./src/
+COPY src/gcp_functions.py src/load_configs.py src/raw_data_yf.py src/utils.py ./src/
 # Install the project in editable mode
 RUN pip install -e .
 
 # Copy model artifacts and late-changing assets
-COPY data/extracted_model/* ./data/extracted_model/
+COPY config/gcs.yml ./config/gcs.yml
+COPY models/extracted_model/ ./models/extracted_model/
 # COPY data/extracted_model/params.json ./data/extracted_model/params.json
 COPY main_inference.py ./main_inference.py
 

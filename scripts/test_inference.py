@@ -16,14 +16,19 @@ logging.basicConfig(
 
 
 def main(
-    env: str, ticker: str, past_horizon: int, endpoint: str, signature_name: str
+    env: str,
+    ticker: str,
+    past_horizon: int,
+    endpoint: str,
+    signature_name: str,
+    model_id: str,
 ) -> None:
     # Find the correct URL for the specified environment
     url = find_url_for_env(env, endpoint)
 
     # Send the request
     if endpoint.split("/")[-1] in ["from_symbol", "from_data"]:
-        pl_out = legacy_api_handler(url, endpoint, ticker, past_horizon)
+        pl_out = legacy_api_handler(url, endpoint, ticker, past_horizon, model_id)
     elif "/" in endpoint:
         logger.info(f"Sending the ticker symbol to the {endpoint} endpoint")
         if signature_name == "from_symbol":
@@ -31,6 +36,7 @@ def main(
                 "ticker": ticker,
                 "past_horizon": past_horizon,
                 "signature_name": signature_name,
+                "model_id": model_id,
             }
         elif signature_name == "from_data":
             try:
@@ -38,6 +44,7 @@ def main(
                     ticker=ticker,
                     past_horizon=past_horizon,
                     signature_name=signature_name,
+                    model_id=model_id,
                 )
             except ValueError as e:
                 logger.error(f"Fetching ticker data failed: {e}")
@@ -77,14 +84,16 @@ def main(
 
 
 def legacy_api_handler(
-    url: str, endpoint: str, ticker: str, past_horizon: int
+    url: str, endpoint: str, ticker: str, past_horizon: int, model_id: str
 ) -> tuple:
     if endpoint.split("/")[-1] in ["from_symbol"]:  # backward compatibility for API v1
         logger.info(f"Sending the ticker symbol to the {endpoint} endpoint")
-        pl_in = {"ticker": ticker, "past_horizon": past_horizon}
+        pl_in = {"ticker": ticker, "past_horizon": past_horizon, "model_id": model_id}
     elif endpoint.split("/")[-1] in ["from_data"]:  # backward compatibility for API v1
         logger.info(f"Fetching ticker data and sending it to the {endpoint} endpoint")
-        pl_in = build_payload_with_data(ticker=ticker, past_horizon=past_horizon)
+        pl_in = build_payload_with_data(
+            ticker=ticker, past_horizon=past_horizon, model_id=model_id
+        )
 
     resp = requests.post(url, json=pl_in)
     pl_out = resp.json()
@@ -118,7 +127,10 @@ def find_url_for_env(env: str, endpoint: str) -> str:
 
 
 def build_payload_with_data(
-    ticker: str, past_horizon: int, signature_name: str = "NA"
+    ticker: str,
+    past_horizon: int,
+    signature_name: str = "NA",
+    model_id: str | None = None,
 ) -> dict:
     """
     Fetches data via with fetch_ticker_data_from_yf(ticker)
@@ -148,6 +160,8 @@ def build_payload_with_data(
         "past_horizon": past_horizon,
         "signature_name": signature_name,
     }
+    if model_id is not None:
+        payload["model_id"] = model_id
     return payload
 
 
@@ -244,8 +258,8 @@ if __name__ == "__main__":
         type=str,
         required=False,
         help="forecasting endpoint; options: forecast, forecast/from_symbol, forecast/from_series",
-        # default="v2/forecast"
-        default="v1/forecast/from_data",
+        default="v2/forecast",
+        # default="v1/forecast/from_data",
         # default="v1/forecast/from_symbol",
     )
     parser.add_argument(
@@ -256,6 +270,13 @@ if __name__ == "__main__":
         default="from_symbol",
         # default="from_data",
     )
+    parser.add_argument(
+        "--model_id",
+        type=str,
+        required=False,
+        help="model id, options: an mlflow run id available locally or on gcs",
+        default="default",
+    )
 
     args = parser.parse_args()
 
@@ -265,4 +286,5 @@ if __name__ == "__main__":
         past_horizon=args.past_horizon,
         endpoint=args.endpoint,
         signature_name=args.signature_name,
+        model_id=args.model_id,
     )

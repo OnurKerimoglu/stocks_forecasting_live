@@ -1,3 +1,7 @@
+# .env should provide: GCS_VIEWER_KEY_PATH
+-include .env
+export
+
 # GCP settings
 # should match with terraform/variables.tf and main.tf
 PROJECT_ID   ?= stocks-forecasting-466906
@@ -7,6 +11,7 @@ IMAGE_NAME   ?= stocks_forecasting_inference
 VERSION      ?= latest
 SERVICE_NAME_ROOT ?= stocks-forecasting-service
 SERVICE_ACCOUNT ?= stocks-forecasting-mle@$(PROJECT_ID).iam.gserviceaccount.com
+GCS_VIEWER_KEY_PATH ?= $(HOME)/gcp-keys/my-gcs-viewer-key.json
 
 GIT_TREE_STATE:=$(shell test -z "$$(git status --porcelain)" && echo clean || echo dirty)
 BRANCH_ST:=$(shell echo $$(git rev-parse --abbrev-ref HEAD) | sed 's/\//_/g')
@@ -43,8 +48,14 @@ prefect_deploy_train:
 	python scripts/deploy_training_workflow.py --env ${BRANCH_SIMPLE}
 	prefect worker start --pool "stocks_forecasting_live_local"
 
-extract_registered_model:
-	python scripts/extract_mlflow_artifacts.py --env ${BRANCH_SIMPLE} --cloudupload
+model_promote_staging:
+	python main_promotion.py --promote_candidate --require_better
+
+model_promote_production:
+	python main_promotion.py --promote_challenger --require_better
+
+model_download:
+	python scripts/download_extracted_model_from_cloud.py --env ${BRANCH_SIMPLE} --refresh
 
 inference_build_local: quality_checks tests
 	@if [ "$(GIT_TREE_STATE)" = "dirty" ]; then \
@@ -54,8 +65,12 @@ inference_build_local: quality_checks tests
 	  docker build -f deploy_inference/Dockerfile -t ${IMAGE_URI} .; \
 	fi
 
+# copy the gcp key to provide access to the alternative models stored in GCS
 inference_serve_local:
-	docker run -it --rm -p 9696:9696 ${IMAGE_URI}
+	docker run -it --rm -p 9696:9696 \
+	-v "$(GCS_VIEWER_KEY_PATH)":/var/secrets/gcp/key.json:ro \
+	-e GOOGLE_APPLICATION_CREDENTIALS=/var/secrets/gcp/key.json \
+	${IMAGE_URI}
 
 inference_publish: inference_build_local
 	@echo "Configuring Docker to auth with GAR"
@@ -87,7 +102,7 @@ inference_test_raw:
 	  -d '{"ticker":"GOOG", "past_horizon": 5}'
 
 inference_test_pretty:
-	python scripts/test_inference.py --env ${BRANCH_SIMPLE} --ticker GOOG --past_horizon 5 --endpoint v2/forecast --signature_name from_symbol
+	python scripts/test_inference.py --env ${BRANCH_SIMPLE} --ticker GOOG --past_horizon 5 --endpoint v2/forecast --signature_name from_symbol --model_id default
 
 FNAME_NEW="yahoofinance_Access_2025-09-08_WSPall_from_2020-09-08.parquet"
 ENV_NEW="prod"
