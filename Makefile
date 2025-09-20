@@ -54,7 +54,7 @@ model_promote_staging:
 model_promote_production:
 	python main_promotion.py --promote_challenger --require_better
 
-model_extract:
+model_download:
 	python scripts/download_extracted_model_from_cloud.py --env ${BRANCH_SIMPLE} --refresh
 
 inference_build_local: quality_checks tests
