@@ -6,18 +6,19 @@
 ## Motivation and Objectives
 Investing in the stock market requires insights into the target tickers -and ideally a view on where prices are headed. While long-term price movements are driven by fundamentals such as a company’s financial health and sector conditions, short-term behaviour is often swayed by recent price action and traders’ reactions. That short-term signal may be partially predictable, and this project is one such attempt.
 
-My priority has not been to craft *the* perfect model so far, but to build an end-to-end, fully automated infrastucture - from training to live inference - using industry-standard MLOps tools and practices. The system should:
+My priority has not been to craft *the* perfect model so far, but to build an end-to-end, fully automated infrastucture - from training to live inference - using industry-standard MLOps tools and practices. The system should provide/support:
 
-- **Expose an inference endpoint** that forecasts 5-day (multi-step) returns for any stock ticker, even those unseen at training time (a global model).
-- **Support rapid experimentation** with new features and model algorithms, while registering full model lineages.
-- **Monitor data and model performance** continuously and identify potential drifts.
-- **Enable managing cloud resources with IaC** so the entire stack can be spun up—or torn down—in one command.
+- **An inference endpoint** for forecasting 5-day (multi-step) returns for any stock ticker (or its recent OLHCV data), even those unseen at training time (a global model).
+- **Rapid experimentation** with new features and model algorithms, while registering full model lineages.
+- **Reproducibility and safe rollouts** through versioned model lineages and environment-specific deployments
+- **Monitoring data and model performance** continuously and identify potential drifts.
+- **Managing cloud resources with IaC** so the entire stack can be spun up—or torn down—in one command.
+
+See [this plog post](https://medium.com/@kerimoglu.o/building-a-predictive-analytics-platform-the-forecasting-system-114d09ec938b) for a concepts-first breakdown of features.
 
 ### 🔮 Live Inference Demo
 
 A first model is already online as a REST API (technical details below). I decided not to publish it openly to avoid potentially excessive costs, but here a simple [Streamlit app](deploy_demo/demo.py) to give it a try: https://stocks-forecasting.streamlit.app.
-
-<https://your-streamlit-url.app> &nbsp;|&nbsp; Source: [`deploy_demo/demo.py`](deploy_demo/demo.py)
 
 > **Heads-up:** the demo is hosted on Streamlit Community Cloud for now, so an idle app may take a few seconds to wake up.
 > Once it’s running, enter the ticker symbol, click `Fetch and Plot`, and you’ll see a chart like this, combining the latest historical data with the 5-day forecast:
@@ -87,21 +88,21 @@ config:
 The purpose of each component (including those that are not shown in the diagram), and the specific tools used in this project are as follows:
 | Component | Purpose | Tooling |
 |---------|---------|---------|
-|Infrastructure as Code | Provision/destroy cloud resources | **Terraform** |
-|Experiment tracker | Organize and evaluate experiment runs | **MLflow** |
-|Model registry | Register models and manage stages | **MLflow** |
-|Data Lake | Store & version models / training artifacts | **Google Cloud Storage (GCS)** |
-|Orchestrator | Orchestrate and schedule workflows | **Prefect** |
-|REST API | Expose inference endpoints | **Flask** |
-|Container Image | Package code and dependencies | **Docker** |
-|Image Registry  | Stores and serves container images |  **Artifact Registry** |
-|Compute | Runs the containerized service | **Cloud Run** |
-|Metric Calculator | Calculate data distribution and model performance metrics | **Evidently AI** |
-|Metric DB | Persist daily/aggregated metrics | Postgres
-|Monitoring Dashboard | Display metrics | **Grafana** |
-|Linter   | Check/fix code quality | **Ruff** |
-|Tester   | Run unit tests | **Pytest**|
-|CI/CD    | Automated integration & delivery | **GitHub Actions** |
+|Infrastructure as Code | Provision/destroy cloud resources | [Hashicorp Terraform](https://developer.hashicorp.com/terraform) |
+|Experiment tracker | Organize and evaluate experiment runs | [MLflow](https://mlflow.org/) |
+|Model registry | Register models and manage stages | [MLflow](https://mlflow.org/)|
+|Orchestrator | Orchestrate and schedule workflows | [Prefect](https://www.prefect.io/) |
+|REST API | Expose inference endpoints | [Flask](https://flask.palletsprojects.com/en/stable/) |
+|Containerization | Package code and dependencies | [Docker](https://www.docker.com/) |
+|Data Lake | Store & version models / training artifacts | [GCS](https://cloud.google.com/storage) |
+|Image Registry  | Stores and serves container images |  [GAR](https://cloud.google.com/artifact-registry) |
+|Compute | Runs the containerized service | [Cloud Run](https://cloud.google.com/run) |
+|Metric Calculator | Calculate data distribution and model performance metrics | [EvidentlyAI](https://www.evidentlyai.com/) |
+|Metric DB | Persist daily/aggregated metrics | [Postgres](https://www.postgresql.org/) |
+|Monitoring Dashboard | Display metrics | [Grafana](https://grafana.com/) |
+|Linter   | Check/fix code quality | [Ruff](https://docs.astral.sh/ruff/) |
+|Tester   | Run unit tests | [pytest](pytest.org/)|
+|CI/CD    | Automated integration & delivery | [GitHub Actions](https://github.com/features/actions) |
 
 
 ## Instructions for Reproduction
