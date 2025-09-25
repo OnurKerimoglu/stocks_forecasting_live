@@ -97,9 +97,9 @@ inference_test_raw:
 	  --region=$(REGION) \
 	  --format='value(status.url)')" && \
 	echo "Service URL of the deployment is: $$SERVICE_URL" && \
-	curl -X POST "$$SERVICE_URL/forecast" \
+	curl -X POST "$$SERVICE_URL/v2/forecast" \
 	  -H "Content-Type: application/json" \
-	  -d '{"ticker":"GOOG", "past_horizon": 5}'
+	  -d '{"ticker":"GOOG", "past_horizon": 5, "signature_name": "from_symbol", "model_id": "0dccfe1eba9748399101883ac7fd5734"}'
 
 inference_test_pretty:
 	python scripts/test_inference.py --env ${BRANCH_SIMPLE} --ticker GOOG --past_horizon 5 --endpoint v2/forecast --signature_name from_symbol --model_id default
